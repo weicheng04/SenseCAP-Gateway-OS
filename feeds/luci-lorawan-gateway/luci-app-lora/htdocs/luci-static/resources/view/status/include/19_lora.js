@@ -19,7 +19,7 @@ var callLoraHistory = rpc.declare({
 
 
 var H = 300;  //lora packets chart height
-var CHART_WIDTH = 800; // Intrinsic width for coordinate calculations
+var CHART_WIDTH = 1000; // Intrinsic width for coordinate calculations (10:3 aspect ratio)
 var vCnt = 10;  //num of grids on y-axis
 
 return baseclass.extend({
@@ -96,8 +96,8 @@ return baseclass.extend({
         }
 
         // --- Section 2: LoRa Packets ---
-        // Create container
-        var svg2Div = E('div', { 'style': 'width:100%; overflow:hidden;' });
+        // Create responsive container with fixed aspect ratio (10:3)
+        var svg2Div = E('div', { 'style': 'position:relative; width:100%; padding-bottom:30%;' });
 
         // Use loaded SVG if available, otherwise fallback to empty SVG
         if (svg2_res && svg2_res.ok) {
@@ -108,11 +108,9 @@ return baseclass.extend({
 
         var svgElement = svg2Div.querySelector('svg');
         if (svgElement) {
-            svgElement.setAttribute('width', '100%');
-            svgElement.setAttribute('height', '300px');
-            // Set viewBox to match our calculation logic (0..800 width)
+            svgElement.setAttribute('style', 'position:absolute; top:0; left:0; width:100%; height:100%;');
             svgElement.setAttribute('viewBox', `0 0 ${CHART_WIDTH} ${H}`);
-            svgElement.setAttribute('preserveAspectRatio', 'none');
+            svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
             this.initLoRaPacketsChart(svgElement, CHART_WIDTH);
 
