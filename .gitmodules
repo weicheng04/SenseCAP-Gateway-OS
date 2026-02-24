@@ -2,6 +2,3 @@
 	path = feeds/chirpstack
 	url = https://github.com/chirpstack/chirpstack-openwrt-feed.git
 
-[submodule "feeds/luci-lorawan-gateway/luci-theme-argon-copy"]
-	path = feeds/luci-lorawan-gateway/luci-theme-argon-copy
-	url = https://github.com/jerrykuku/luci-theme-argon.git
