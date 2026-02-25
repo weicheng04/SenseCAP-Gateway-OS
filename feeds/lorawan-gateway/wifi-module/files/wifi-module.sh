@@ -76,29 +76,32 @@ apply_wifi_config() {
             log_message "ERROR: AP_SSID not specified for AP mode"
             return 1
         fi
-        
+
+        # Remove all existing wifi-iface sections
+        uci show wireless | grep "\.iface=" | while read -r line; do
+            local section=$(echo "$line" | cut -d'.' -f2 | cut -d'=' -f1)
+            uci -q delete "wireless.${section}"
+        done
+
         uci set wireless.radio0.disabled='0'
         uci set wireless.radio0.band='2g'
         uci set wireless.radio0.channel='6'
         uci -q delete wireless.radio0.htmode
-        
-        uci -q delete wireless.default_radio0
-        uci -q delete wireless.wifinet0
-        
+
         uci set wireless.default_radio0='wifi-iface'
         uci set wireless.default_radio0.device='radio0'
         uci set wireless.default_radio0.network='wlan'
         uci set wireless.default_radio0.mode='ap'
         uci set wireless.default_radio0.ifname='wlan0'
         uci set wireless.default_radio0.ssid="$ap_ssid"
-        
+
         if [ -n "$ap_password" ] && [ ${#ap_password} -ge 8 ]; then
             uci set wireless.default_radio0.encryption='psk2'
             uci set wireless.default_radio0.key="$ap_password"
         else
             uci set wireless.default_radio0.encryption='none'
         fi
-        
+
         uci commit wireless
         log_message "Configured as AP: SSID=$ap_ssid"
         
@@ -107,30 +110,33 @@ apply_wifi_config() {
             log_message "ERROR: STA_SSID not specified for STA mode"
             return 1
         fi
-        
+
+        # Remove all existing wifi-iface sections
+        uci show wireless | grep "\.iface=" | while read -r line; do
+            local section=$(echo "$line" | cut -d'.' -f2 | cut -d'=' -f1)
+            uci -q delete "wireless.${section}"
+        done
+
         uci set wireless.radio0.disabled='0'
         uci set wireless.radio0.band='2g'
         uci set wireless.radio0.htmode='HT20'
         uci set wireless.radio0.channel='auto'
         uci set wireless.radio0.country='CN'
-        
-        uci -q delete wireless.default_radio0
-        uci -q delete wireless.wifinet0
-        
+
         uci set wireless.default_radio0='wifi-iface'
         uci set wireless.default_radio0.device='radio0'
         uci set wireless.default_radio0.network='wwan'
         uci set wireless.default_radio0.mode='sta'
         uci set wireless.default_radio0.ifname='wlan0'
         uci set wireless.default_radio0.ssid="$sta_ssid"
-        
+
         if [ -n "$sta_password" ]; then
             uci set wireless.default_radio0.encryption='psk2'
             uci set wireless.default_radio0.key="$sta_password"
         else
             uci set wireless.default_radio0.encryption='none'
         fi
-        
+
         uci commit wireless
         log_message "Configured as STA: SSID=$sta_ssid"
         
