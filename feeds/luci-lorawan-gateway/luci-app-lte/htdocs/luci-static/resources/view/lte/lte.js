@@ -115,7 +115,7 @@ return view.extend({
         o.value('ipv4v6', 'IPv4/IPv6');
         o.value('ipv4', 'IPv4');
         o.value('ipv6', 'IPv6');
-        o.default = 'ipv4v6';
+        o.default = 'ipv4';
 
         // Modem Control Buttons
         o = s.option(form.DummyValue, '_modem_control');
