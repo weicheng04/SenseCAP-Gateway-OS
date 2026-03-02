@@ -1376,6 +1376,8 @@ footer > a {
   background-color: #fff;
   box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.16), 0 0 2px 0 rgba(0, 0, 0, 0.12);
   text-shadow: none;
+  transition: opacity 0.4s ease;
+  opacity: 1;
 }
 .alert.error,
 .alert-message.error {
@@ -1383,8 +1385,8 @@ footer > a {
   color: #fff;
 }
 .alert.error h4,
-.alert.error p,
 .alert-message.error h4,
+.alert.error p,
 .alert-message.error p {
   color: #fff;
 }
@@ -1430,6 +1432,9 @@ footer > a {
 #mwan3-service-status > .alert-message {
   left: 0.5rem;
   transform: none;
+}
+.alert-message.fade-out {
+  opacity: 0;
 }
 .lg {
   margin: 0;
@@ -3658,6 +3663,12 @@ pre.command-output {
 }
 #cbi-dockerd .cbi-section.cbi-tblsection {
   padding: 0;
+}
+#cbi-smartdns #service_status {
+  padding: 16px;
+}
+#cbi-smartdns .cbi-section-node {
+  padding: 16px;
 }
 #cbi-docker .cbi-section .cbi-section-node {
   box-sizing: border-box;
