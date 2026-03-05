@@ -38,6 +38,9 @@
                 ],
                 "/bin/cat /version.txt": [
                     "exec"
+                ],
+                "/bin/cat /var/run/lte-info.json": [
+                    "exec"
                 ]
             }
         },
