@@ -21,6 +21,9 @@
                 "/etc/deviceinfo/freq_plan": [
                     "read"
                 ],
+                "/etc/deviceinfo/hw_name": [
+                    "read"
+                ],
                 "/version.txt": [
                     "read"
                 ],
@@ -34,6 +37,9 @@
                     "exec"
                 ],
                 "/bin/cat /etc/deviceinfo/freq_plan": [
+                    "exec"
+                ],
+                "/bin/cat /etc/deviceinfo/hw_name": [
                     "exec"
                 ],
                 "/bin/cat /version.txt": [

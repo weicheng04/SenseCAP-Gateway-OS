@@ -16,5 +16,5 @@ Offset  Length  Description
         0X0002: EU868
         0X0003: CN470
 0X22    2      Hardware Name Length (big-endian) E.g., 0X0008
-0X24    32     Hardware Name E.g., "reComputer-R1125" (Null-terminated if length <32)
+0X24    32     Hardware Name E.g., "R1225-EU868-4G" (Null-terminated if length <32)
 0X44    4      CRC32 checksum of all previous bytes (0x04 to 0X44)

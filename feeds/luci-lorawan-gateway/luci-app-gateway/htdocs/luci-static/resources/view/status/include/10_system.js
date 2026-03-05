@@ -61,6 +61,11 @@ return baseclass.extend({
 			}).catch(function() {
 				return '';
 			}),
+			fs.exec('/bin/cat', ['/etc/deviceinfo/hw_name']).then(function(res) {
+				return res.stdout || '';
+			}).catch(function() {
+				return '';
+			}),
 			getLTEInfo
 		]);
 	},
@@ -73,7 +78,8 @@ return baseclass.extend({
 		    eui         = data[4] ? data[4].trim() : '',
 		    versionText = data[5] || '',
 		    freqPlan    = data[6] ? data[6].trim() : '',
-		    lteInfo     = data[7] || {};
+		    hwName      = data[7] ? data[7].trim() : '',
+		    lteInfo     = data[8] || {};
 
 		// Always show LTE fields (even if not connected)
 		var imei        = lteInfo.imei || '';
@@ -111,7 +117,7 @@ return baseclass.extend({
 
 		var fields = [
 			_('Hostname'),         boardinfo.hostname,
-			_('Model'),            boardinfo.model,
+			_('Model'),            hwName || boardinfo.model,
 			_('SN'),               sn || '-',
 			_('EUI'),              eui || '-',
 			_('Build Version'),    (L.isObject(boardinfo.release) ? boardinfo.release.description + ' / ' : '') + (luciversion || ''),
