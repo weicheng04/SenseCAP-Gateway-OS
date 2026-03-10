@@ -1,86 +1,288 @@
-# Seeed gateway packages for OpenWrt
+# Recomputer Gateway - LoRaWAN Gateway Firmware
 
-This project provides the build environment and default configuration for the reComputer Gateway firmware based on OpenWrt. It integrates LoRa gateway support across **ChirpStack**, **Semtech packet_forwarder**, and **Basic Station**, and also includes cellular (4G/LTE) dial-up networking plus MQTT and serial (UART/RS485) related utilities.
+> OpenWrt-based LoRaWAN gateway firmware for Seeed Studio's Recomputer Gateway device
+
+[![Build Status](https://github.com/seeed-station/recomputer-gateway/workflows/Build%20Recomputer-Gateway%20Firmware/badge.svg)](https://github.com/seeed-station/recomputer-gateway/actions)
+
+## Overview
+
+Recomputer Gateway is a full-featured LoRaWAN gateway firmware built on OpenWrt 24.10 and deployed via LXC containers. The firmware integrates multiple LoRaWAN protocol stacks including **ChirpStack**, **Semtech packet_forwarder**, and **Basic Station**, along with 4G/LTE mobile network access, MQTT services, and serial communication (UART/RS485) capabilities.
 
 ## Features
 
-- **Base System**: OpenWrt 
-- **LoRaWAN**: Supports multiple LoRa gateway stacks/platforms: **ChirpStack**, **Semtech packet_forwarder**, and **Basic Station**
-- **Cellular (4G/LTE)**: Supports 4G dial-up networking for Internet access
-- **Services**: MQTT and serial (UART/RS485) related utilities
+- **Base System**: OpenWrt 24.10 (ARMv8/aarch64)
+- **LoRaWAN Support**:
+  - ChirpStack Concentrator
+  - Semtech Packet Forwarder
+  - Basic Station
+- **Networking**:
+  - 4G/LTE dial-up networking
+  - Multi-WAN support (load balancing/failover)
+  - Routing configuration management
+- **Peripherals**:
+  - RS485 serial configuration
+  - UPS power management
+- **Web Management**:
+  - LuCI interface (SenseCap theme)
+  - Web terminal
+  - LoRa status monitoring
+  - LTE status display
+  - OTA upgrade support
+
+## Screenshots
+
+### System Status Overview
+
+![Status Overview](docs/images/status.png)
+
+System overview page displaying LoRa status, network connections, and packet statistics.
+
+## Device Information
+
+| Item | Value |
+|------|-------|
+| Target Platform | ARMv8 (aarch64_generic) |
+| OpenWrt Version | openwrt-24.10 |
+| Container | LXC |
+| Default User | root (no password) |
 
 ## Directory Structure
 
-- `feeds/`: Contains custom feeds for ChirpStack and LoRaWAN gateway packages.
-- `.config`: Default OpenWrt build configuration.
-- `feeds.conf.default`: Custom feeds configuration.
-
-## Build Instructions
-
-### Prerequisites
-
-Ensure you have a Linux environment with the necessary build tools installed. You can refer to the [OpenWrt Build System Setup](https://openwrt.org/docs/guide-developer/build-system/install-buildsystem) guide.
-
-Common dependencies (Ubuntu/Debian):
-```bash
-sudo apt update
-sudo apt install build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
-gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev \
-file wget
+```
+recomputer-gateway/
+├── .config                    # OpenWrt build configuration
+├── .github/
+│   └── workflows/
+│       └── build.yml          # GitHub Actions build workflow
+├── feeds.conf.default         # Feeds configuration
+├── feeds/
+│   ├── chirpstack/            # ChirpStack related packages
+│   ├── lorawan-gateway/       # LoRaWAN Gateway backend services
+│   └── luci-lorawan-gateway/  # LuCI Web interface extensions
+│       ├── luci-app-gateway/      # Main gateway configuration app
+│       ├── luci-app-lora/         # LoRa status display
+│       ├── luci-app-lte/          # LTE configuration
+│       ├── luci-app-ups/          # UPS power management
+│       ├── luci-app-rs485/        # RS485 configuration
+│       ├── luci-app-terminal/     # Web terminal
+│       ├── luci-app-ota/          # OTA upgrade
+│       ├── luci-app-multiwan/     # Multi WAN configuration
+│       ├── luci-app-routing/      # Routing configuration
+│       └── luci-theme-sensecap/   # SenseCap theme
+├── openwrt/                   # OpenWrt source (downloaded during build)
+└── README.md                  # This document
 ```
 
-### Quick Start
+## Building
 
-1.  **Clone this repository:**
+### System Requirements
 
-    ```bash
-    git clone <repository_url>
-    cd recomputer-gateway
-    ```
+- **OS**: Ubuntu/Debian Linux
+- **Disk Space**: > 50GB recommended
+- **Memory**: > 8GB recommended
 
-2.  **Initialize Submodules:**
+### Install Dependencies
 
-    Download the OpenWrt source code and other submodules.
+```bash
+sudo apt-get update
+sudo apt-get install build-essential clang flex bison g++ gawk \
+    gcc-multilib g++-multilib gettext git libncurses5-dev \
+    libssl-dev rsync unzip zlib1g-dev file wget
+```
 
-    ```bash
-    git submodule update --init --recursive
-    git clone https://github.com/openwrt/openwrt.git
-    ```
+### Build Steps
 
-3.  **Setup Configuration and Feeds:**
+#### 1. Initialize Submodules
 
-    Copy the configuration files to the OpenWrt directory.
+```bash
+git submodule update --init --recursive
+```
 
-    ```bash
-    cp .config openwrt/.config
-    cp feeds.conf.default openwrt/feeds.conf.default
-    ```
+#### 2. Clone OpenWrt Source
 
-4.  **Update and Install Feeds:**
+```bash
+git clone https://github.com/openwrt/openwrt.git -b openwrt-24.10
+cd openwrt
+rm -r feeds.conf.default
+cp ../feeds.conf.default feeds.conf.default
+```
 
-    Navigate to the OpenWrt directory and install the feeds.
+#### 3. Update and Install Feeds
 
-    ```bash
-    cd openwrt
-    ./scripts/feeds update -a
-    ./scripts/feeds install -a
-    ```
+```bash
+./scripts/feeds update -a
+./scripts/feeds install -a
+```
 
-5.  **Build Firmware:**
+#### 4. Apply Configuration
 
-    Start the build process. The `-j` option specifies the number of parallel jobs (adjust based on your CPU cores). `V=s` enables verbose output to see compilation details and errors.
+```bash
+cp ../.config .config
+make defconfig
+```
 
-    ```bash
-    make -j$(nproc) V=s
-    ```
+#### 5. (Optional) Disable Rust LLVM CI Download for Faster Build
 
-    The built firmware images will be located in `openwrt/bin/targets/armsr/armv8`.
+```bash
+sed -i 's/--set=llvm.download-ci-llvm=true/--set=llvm.download-ci-llvm=false/' \
+    feeds/packages/lang/rust/Makefile
+```
 
-## Customization
+#### 6. Build
 
-To customize the firmware (e.g., add packages, change kernel settings), run `menuconfig` inside the `openwrt` directory:
+```bash
+unset CI GITHUB_ACTIONS CONTINUOUS_INTEGRATION
+make -j$(nproc)
+```
+
+#### 7. Get Build Output
+
+After completion, the firmware is located at:
+```
+openwrt/bin/targets/armsr/armv8/openwrt-armsr-armv8-generic-rootfs.tar.gz
+```
+
+### Customization
+
+To customize the firmware (e.g., add packages, modify kernel settings), run `menuconfig` in the `openwrt` directory:
 
 ```bash
 cd openwrt
 make menuconfig
 ```
+
+## Deployment
+
+The firmware is deployed to the device via LXC container:
+
+### 1. Stop Existing Container
+
+```bash
+sudo lxc-stop -n SenseCAP
+```
+
+### 2. Clean and Create New rootfs
+
+```bash
+sudo rm -rf /var/lib/lxc/SenseCAP/rootfs
+sudo mkdir -p /var/lib/lxc/SenseCAP/rootfs
+```
+
+### 3. Extract New Firmware
+
+```bash
+sudo tar -xzf /path/to/openwrt-armsr-armv8-generic-rootfs.tar.gz \
+    -C /var/lib/lxc/SenseCAP/rootfs
+```
+
+### 4. Start Container
+
+```bash
+sudo lxc-start -n SenseCAP
+```
+
+### 5. Enter Container for Debugging
+
+```bash
+sudo lxc-attach -n SenseCAP
+```
+
+## Function Modules
+
+### LoRaWAN Gateway
+
+- **Config File**: `/etc/config/lora_pkt_fwd`
+- **Service**: `lorawan_gateway`
+- **UI**: LuCI Gateway app
+
+### ChirpStack Concentrator
+
+- **Target**: seeed-gateway
+- **Service**: `chirpstack-concentratord`
+
+### LTE/WWAN Support
+
+- **Config**: `/etc/config/network`
+- **Firewall**: LTE and WWAN networks have firewall rules added
+
+### Multi-WAN Support
+
+- Supports multiple WAN configurations including LTE and Ethernet
+- Load balancing and failover capabilities
+
+## Development
+
+### SSH to LXC Container
+
+From host machine:
+```bash
+sudo lxc-attach -n SenseCAP
+```
+
+### View Logs
+
+```bash
+# LoRa packet forwarder logs
+logread | grep lora
+
+# System logs
+logread
+```
+
+### Web Interface
+
+Access `http://[IP_ADDRESS]/cgi-bin/luci` for:
+- **Status Overview**: LoRa status, network connections, packet statistics
+- **Services**: LoRa, network and other configurations
+
+## Feeds Description
+
+| Feed | Description |
+|------|-------------|
+| packages | OpenWrt official packages (openwrt-24.10) |
+| luci | OpenWrt LuCI Web interface (openwrt-24.10) |
+| routing | Routing related packages (openwrt-24.10) |
+| chirpstack | Local link - ChirpStack integration |
+| lorawan_gateway | Local link - LoRaWAN gateway services |
+| luci_lorawan_gateway | Local link - Gateway LuCI interface |
+
+## FAQ
+
+### Build Fails
+
+**Problem**: Errors during compilation
+**Solution**:
+- Check disk space (recommend > 50GB)
+- Ensure submodules are updated: `git submodule update --init --recursive`
+- Rust compilation is slow, disable CI LLVM download to speed up
+
+### Cannot Access After Deployment
+
+**Problem**: Cannot access web interface after container starts
+**Solution**:
+- Check LXC container status: `sudo lxc-ls -f`
+- View container logs: `sudo lxc-info -n SenseCAP`
+- Verify network configuration is correct
+
+### LoRa Data Not Displaying
+
+**Problem**: No data on LoRa status page
+**Solution**:
+- Check concentrator service status
+- View logs: `logread | grep -i lora`
+- Verify gateway configuration is correct
+
+## Related Links
+
+- [OpenWrt](https://openwrt.org/)
+- [ChirpStack](https://www.chirpstack.io/)
+- [LuCI](https://github.com/openwrt/luci)
+- [Seeed Studio](https://www.seeedstudio.com/)
+
+## License
+
+This project follows the OpenWrt project license requirements.
+
+## Contributing
+
+Issues and Pull Requests are welcome!
