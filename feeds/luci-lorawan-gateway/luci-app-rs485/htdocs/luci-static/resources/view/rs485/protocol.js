@@ -232,8 +232,8 @@ return view.extend({
         }, this);
 
         o = s.option(form.Value, 'timeout', _('Timeout (x100ms)'),
-            _('Timeout value in units of 100ms. Must be an integer between 1 and 100.'));
-        o.datatype = 'range(1,100)';
+            _('Timeout value in units of 100ms. Must be an integer between 1 and 1800.'));
+        o.datatype = 'range(1,1800)';
         o.default = '10';
         o.rmempty = false;
         o.depends({'type': 'modbus-rtu', 'function_code': '01'});
