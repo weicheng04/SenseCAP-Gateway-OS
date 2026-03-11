@@ -110,7 +110,7 @@ return view.extend({
         o.value('16', '16 - Write Multiple Registers');
         o.default = '03';
 
-        o = s.option(form.Value, 'register_address', _('Register Address'));
+        o = s.option(form.Value, 'register_address', _('Start Register Address'));
         o.depends('type', 'modbus-rtu');
         o.datatype = 'range(0,65535)';
         o.placeholder = '40001';
