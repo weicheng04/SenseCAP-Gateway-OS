@@ -92,7 +92,7 @@ return view.extend({
             return _('The function is under development, please pay attention to subsequent OTA updates.');
         };
 
-        o = s.option(form.Value, 'device_address', _('Device Address (Slave ID)'));
+        o = s.option(form.Value, 'device_address', _('Device Address (Slave ID)'), _('Value can be entered in hexadecimal (0x) or decimal format.'));
         o.depends('type', 'modbus-rtu');
         o.placeholder = '1';
         o.default = '1';
