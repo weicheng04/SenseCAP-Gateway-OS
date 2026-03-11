@@ -8,6 +8,10 @@ AT_RETRY_INTERVAL=180
 LTE_INFO_CACHE="/var/run/lte-info.json"
 LTE_INFO_UPDATE_INTERVAL=10
 
+# if $1 is not empty, set LTE_INFO_CACHE to $1
+if [ -n "$1" ]; then
+    LTE_INFO_CACHE="$1"
+fi
 # Load JSON library
 . /usr/share/libubox/jshn.sh
 
