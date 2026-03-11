@@ -178,5 +178,23 @@ return view.extend({
         }, this);
 
         return m.render();
+    },
+
+    // Override handleSaveApply to restart lte-serve after saving
+    handleSaveApply: function(ev, mode) {
+        var self = this;
+
+        // Call parent's handleSaveApply first
+        return this.super('handleSaveApply', [ev, mode])
+            .then(function() {
+                // Restart lte-serve service to reload cached info
+                return fs.exec('/etc/init.d/lte-serve', ['restart']);
+            })
+            .then(function() {
+                ui.addNotification(null, E('p', _('LTE service restarted')), 'info');
+            })
+            .catch(function(err) {
+                console.error('Failed to restart lte-serve:', err);
+            });
     }
 });
