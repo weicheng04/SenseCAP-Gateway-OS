@@ -119,6 +119,16 @@ impl Logger {
     }
 }
 
+// Parse a string as u8, supporting both hexadecimal (0x prefix) and decimal formats
+fn parse_hex_or_dec_u8(s: &str) -> Option<u8> {
+    let s = s.trim();
+    if s.starts_with("0x") || s.starts_with("0X") {
+        u8::from_str_radix(&s[2..], 16).ok()
+    } else {
+        s.parse().ok()
+    }
+}
+
 // Load configuration from UCI
 fn load_config_from_uci() -> Result<Config, Box<dyn std::error::Error + Send + Sync>> {
     let uci_get = |config: &str, section: &str, option: &str| -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
@@ -241,7 +251,7 @@ fn load_config_from_uci() -> Result<Config, Box<dyn std::error::Error + Send + S
     // Protocol config
     let device_address = uci_get("rs485-module", "protocol", "device_address")
         .ok()
-        .and_then(|s| s.parse().ok())
+        .and_then(|s| parse_hex_or_dec_u8(&s))
         .unwrap_or(1);
     let function_code = uci_get("rs485-module", "protocol", "function_code")
         .ok()
