@@ -81,7 +81,8 @@ return baseclass.extend({
 		    hwName      = data[7] ? data[7].trim() : '',
 		    lteInfo     = data[8] || {};
 
-		// Always show LTE fields (even if not connected)
+		// LTE fields - only show if connected
+		var lteConnected = (lteInfo.connected === 'true' || lteInfo.connected === true);
 		var imei        = lteInfo.imei || '';
 		var iccid       = lteInfo.iccid || '';
 		var rssi        = lteInfo.rssi || '';
@@ -128,12 +129,14 @@ return baseclass.extend({
 			_('LoRaWAN Region'),   freqPlan || '-'
 		];
 
-		// Always add LTE fields
-		fields.push(
-			_('IMEI'),             imei || '-',
-			_('ICCID'),            iccid || '-',
-			_('LTE RSSI'),         (rssi !== '') ? rssi + 'dBm' : '-'
-		);
+		// Add LTE fields only if connected
+		if (lteConnected) {
+			fields.push(_('IMEI'), imei || '-');
+			if (iccid !== '') {
+				fields.push(_('ICCID'), iccid);
+			}
+			fields.push(_('LTE RSSI'), (rssi !== '') ? rssi + 'dBm' : '-');
+		}
 
 		fields.push(
 			_('Local Time'),       datestr,
