@@ -189,6 +189,20 @@ do_upgrade() {
         cp -a /etc/config "$BACKUP_DIR/"
     fi
 
+    # Backup user account files (only shadow for root password, and sudoers)
+    if [ -f "/etc/shadow" ]; then
+        cp /etc/shadow "$BACKUP_DIR/"
+    fi
+    if [ -f "/etc/sudoers" ]; then
+        cp /etc/sudoers "$BACKUP_DIR/"
+    fi
+
+    # Backup SSH keys
+    if [ -d "/etc/dropbear" ]; then
+        mkdir -p "$BACKUP_DIR/dropbear"
+        cp -a /etc/dropbear/* "$BACKUP_DIR/dropbear/"
+    fi
+
     # Backup marker files
     for marker in /etc/.gateway_configured /etc/.lora_configured /etc/.wifi_configured; do
         if [ -f "$marker" ]; then
@@ -205,6 +219,39 @@ do_upgrade() {
         if [ -d "$BACKUP_DIR/config" ]; then
             cp -a "$BACKUP_DIR/config/"* /etc/config/ 2>/dev/null
         fi
+
+        # Restore user account files (merge with new system users)
+        # Only restore root/admin password, keep new system users
+        if [ -f "$BACKUP_DIR/shadow" ]; then
+            # Extract root password hash from backup
+            local root_hash=$(grep '^root:' "$BACKUP_DIR/shadow" 2>/dev/null | cut -d:':' -f2)
+            if [ -n "$root_hash" ]; then
+                sed -i "s|^root:[^:]*:|root:${root_hash}:|" /etc/shadow 2>/dev/null
+            fi
+            # Extract admin password hash from backup
+            local admin_hash=$(grep '^admin:' "$BACKUP_DIR/shadow" 2>/dev/null | cut -d:':' -f2)
+            if [ -n "$admin_hash" ]; then
+                # Check if admin user exists in new shadow, update or add
+                if grep -q '^admin:' /etc/shadow 2>/dev/null; then
+                    sed -i "s|^admin:[^:]*:|admin:${admin_hash}:|" /etc/shadow 2>/dev/null
+                else
+                    # Add admin user entry from backup
+                    grep '^admin:' "$BACKUP_DIR/shadow" >> /etc/shadow
+                fi
+            fi
+        fi
+
+        # Restore sudoers if backup exists
+        if [ -f "$BACKUP_DIR/sudoers" ]; then
+            cp "$BACKUP_DIR/sudoers" "/etc/sudoers"
+        fi
+
+        # Restore SSH keys
+        if [ -d "$BACKUP_DIR/dropbear" ]; then
+            mkdir -p /etc/dropbear
+            cp -a "$BACKUP_DIR/dropbear/"* /etc/dropbear/ 2>/dev/null
+        fi
+
         for marker in "$BACKUP_DIR"/.*_configured; do
             if [ -f "$marker" ]; then
                 cp "$marker" /etc/
