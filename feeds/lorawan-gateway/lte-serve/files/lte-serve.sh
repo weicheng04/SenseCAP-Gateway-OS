@@ -143,30 +143,36 @@ get_lte_info_at() {
 
 # Configure wwan0 via AT commands if not present
 configure_wwan0() {
-    local max_wait=60
+    local max_wait=120
     local count=0
 
-    # Wait for wwan0 to appear
+    # First, just wait for wwan0 to appear (module may already be configured)
+    log "Waiting for wwan0 interface to appear..."
     while ! wwan0_exists && [ $count -lt $max_wait ]; do
-        log "wwan0 not found, configuring LTE module..."
-        send_at_and_read 'AT+QCFG="usbnet",0' "$LTE_USB_PORT" 2
-        send_at_and_read 'AT+CFUN=1,1' "$LTE_USB_PORT" 2
-        log "AT commands sent, waiting for module to re-enumerate..."
-
-        # Wait for re-enumeration
-        count=0
-        while ! wwan0_exists && [ $count -lt $max_wait ]; do
-            sleep 1
-            count=$((count + 1))
-        done
-
-        if wwan0_exists; then
-            log "wwan0 interface is now available"
-            return 0
-        fi
+        sleep 1
+        count=$((count + 1))
     done
 
     if wwan0_exists; then
+        log "wwan0 interface is available"
+        return 0
+    fi
+
+    # wwan0 still not found, try AT commands as fallback
+    log "wwan0 not found after ${max_wait}s, trying AT commands..."
+    send_at_and_read 'AT+QCFG="usbnet",0' "$LTE_USB_PORT" 2
+    send_at_and_read 'AT+CFUN=1,1' "$LTE_USB_PORT" 2
+    log "AT commands sent, waiting for module to re-enumerate..."
+
+    # Wait for re-enumeration
+    count=0
+    while ! wwan0_exists && [ $count -lt $max_wait ]; do
+        sleep 1
+        count=$((count + 1))
+    done
+
+    if wwan0_exists; then
+        log "wwan0 interface is now available"
         return 0
     else
         log "Warning: wwan0 still not available after configuration"
@@ -284,9 +290,13 @@ init_lte_module() {
     # Step 4: Enable LTE dialing (set lte_disable=0)
     enable_lte_dialing
 
-    # Step 5: Trigger interface up to start dialing
-    log "Triggering LTE interface up..."
-    ifup LTE 2>/dev/null &
+    # Step 5: Ensure wwan0 exists before ifup
+    if wwan0_exists; then
+        log "Triggering LTE interface up..."
+        ifup LTE 2>/dev/null &
+    else
+        log "Error: wwan0 not available, cannot bring up LTE interface"
+    fi
 
     log "LTE module initialization completed"
 }
