@@ -1,0 +1,10 @@
+#!/bin/sh
+# Disable wpad ujail to fix WPA_SUPPLICANT_FAILED issue
+# The ujail causes path mismatch: "executable path /usr/sbin/wpad does not match process path"
+
+if [ -f /etc/capabilities/wpad.json ]; then
+    rm -f /etc/capabilities/wpad.json
+    logger -t wifi-init "Disabled wpad ujail to fix WPA_SUPPLICANT_FAILED issue"
+fi
+
+exit 0

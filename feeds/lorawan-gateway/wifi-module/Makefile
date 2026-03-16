@@ -26,6 +26,7 @@ define Package/wifi-module/install
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/wifi-module.init $(1)/etc/init.d/wifi-module
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
+	$(INSTALL_BIN) ./files/etc/uci-defaults/65_disable_wpad_jail $(1)/etc/uci-defaults/65_disable_wpad_jail
 	$(INSTALL_BIN) ./files/etc/uci-defaults/66_wifi_init $(1)/etc/uci-defaults/66_wifi_init
 endef
 
