@@ -21,8 +21,8 @@
  *  Licensed to the public under the Apache License 2.0
  */
 :root {
-  --primary: #5e72e4;
-  --dark-primary: #483d8b;
+  --primary: #8FC320;
+  --dark-primary: #8FC320;
   --header-color: #fff;
   --menu-bg-color: #ffffff;
   --menu-color: #5f6368;
@@ -834,14 +834,17 @@ select[multiple="multiple"] {
 }
 .login-page .login-container .login-form .cbi-button-apply {
   width: 100% !important;
-  min-height: 50px;
+  height: 50px;
   margin: 30px 0 100px;
-  padding: 10px 0;
+  padding: 0;
   font-size: 15px;
   font-weight: 600;
+  line-height: 50px;
   color: var(--white);
   text-align: center;
-  letter-spacing: 0.8rem;
+  letter-spacing: normal !important;
+  word-spacing: normal !important;
+  text-indent: 0 !important;
   background-color: var(--primary) !important;
   border: none;
   border-radius: 6px;
@@ -1128,11 +1131,11 @@ select[multiple="multiple"] {
 }
 .main-left .nav li .menu[data-title="VPN"]:before {
   content: "\e90b";
-  color: #8965e0;
+  color: #8FC320;
 }
 .main-left .nav li .menu[data-title="Network"]:before {
-  content: "\e908";
-  color: #8965e0;
+  content: "\e90d";
+  color: #8FC320;
 }
 .main-left .nav li .menu[data-title="Bandwidth_Monitor"]:before {
   content: "\e90d";
@@ -1144,7 +1147,7 @@ select[multiple="multiple"] {
 }
 .main-left .nav li .menu[data-title="Statistics"]:before {
   content: "\e913";
-  color: #8965e0;
+  color: #8FC320;
 }
 .main-left .nav li .menu[data-title="Control"]:before {
   content: "\e912";
@@ -1158,6 +1161,16 @@ select[multiple="multiple"] {
 .main-left .nav li .food[data-title="Log_out"]::before {
   content: "\e907";
   color: #adb5bd;
+}
+/* LoRa Menu Icon */
+.main-left .nav li .menu[data-title="LoRa"]:before {
+  content: "\e908";
+  color: #2dce89;
+}
+/* RS485 Menu Icon */
+.main-left .nav li .menu[data-title="RS485"]:before {
+  content: "\e90c";
+  color: #11cdef;
 }
 .main-left[style*="overflow: hidden"] > .nav > .slide > .menu::before {
   display: none;

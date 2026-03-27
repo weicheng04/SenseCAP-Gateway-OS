@@ -137,7 +137,7 @@
 					</div>
 				</div>
 				<div>
-					<input type="submit" value="{{ _('Log in') }}" class="cbi-button cbi-button-apply" />
+					<input type="submit" value="Login" class="cbi-button cbi-button-apply" />
 				</div>
 			</form>
 			<!-- Login Form End -->
