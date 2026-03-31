@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Defaults
-DEFAULT_SN="100079154261000001"
+DEFAULT_SN="1000791542610000"
 DEFAULT_EUI="2CF7F1C0751000A0"
 DEFAULT_FREQ_PLAN="US915"
 DEFAULT_HW_NAME="reComputer-R1125"
@@ -79,7 +79,7 @@ printf "\x00\x48" >> "$DATA_TMP"
 # 2. SN - 18 bytes
 # Truncate if too long, pad if too short
 printf "%.18s" "$SN" >> "$DATA_TMP"
-# Pad with nulls if length < 16
+# Pad with nulls if length < 18
 current_len=$(printf "%.18s" "$SN" | wc -c)
 if [ "$current_len" -lt 18 ]; then
     pad_len=$((18 - current_len))
@@ -127,7 +127,7 @@ calc_crc32() {
 }
 
 CRC_DATA_TMP=$(mktemp)
-tail -c +7 "$DATA_TMP" > "$CRC_DATA_TMP"
+tail -c +5 "$DATA_TMP" > "$CRC_DATA_TMP"
 CRC_HEX=$(calc_crc32 "$CRC_DATA_TMP")
 rm "$CRC_DATA_TMP"
 # Convert CRC hex to binary (4 bytes)
