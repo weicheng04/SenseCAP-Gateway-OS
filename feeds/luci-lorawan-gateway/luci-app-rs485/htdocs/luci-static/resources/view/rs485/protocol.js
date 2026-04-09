@@ -80,17 +80,17 @@ return view.extend({
         o.default = 'modbus-rtu';
         o.validate = function(section_id, value) {
             if (value === 'bacnet-mstp') {
-                return _('BACnet MS/TP is not supported yet. Please select Modbus RTU.');
+                return _('BACnet MS/TP has a dedicated configuration page. Please use the BACnet menu.');
             }
             return true;
         };
 
-        // Development notice for BACnet MS/TP
+        // Link to dedicated BACnet configuration page
         o = s.option(form.DummyValue, '_bacnet_notice', _('Notice'));
         o.depends('type', 'bacnet-mstp');
         o.rawhtml = true;
         o.cfgvalue = function() {
-            return _('BACnet Web configuration is under development. Please follow upcoming OTA updates. <br>It can be accessed via the <code>bacserv</code> command in the <a href="/cgi-bin/luci/admin/system/ttyd">LNX container terminal</a>.');
+            return _('BACnet MS/TP now has a dedicated configuration interface. <br><a href="/cgi-bin/luci/admin/bacnet/general" class="cbi-button cbi-button-apply" style="display:inline-block;margin-top:6px;">Go to BACnet Configuration</a>');
         };
 
         o = s.option(form.Value, 'device_address', _('Device Address (Slave ID)'), _('Value can be entered in hexadecimal (0x) or decimal format.'));
