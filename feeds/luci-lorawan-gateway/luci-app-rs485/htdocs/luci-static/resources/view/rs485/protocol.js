@@ -111,12 +111,26 @@ return view.extend({
         o.value('16', '16 - Write Multiple Registers');
         o.default = '03';
 
-        o = s.option(form.Value, 'register_address', _('Start Register Address'));
+        o = s.option(form.Value, 'register_address', _('Start Register Address'),
+            _('Multiple addresses can be separated by commas, e.g. 40001,40010,40020'));
         o.depends('type', 'modbus-rtu');
-        o.datatype = 'range(0,65535)';
-        o.placeholder = '40001';
+        o.placeholder = '40001,40010,40020';
         o.default = '40001';
         o.rmempty = false;
+        o.validate = function(section_id, value) {
+            if (!value || value === '')
+                return _('This field is required.');
+            var parts = value.split(',');
+            for (var i = 0; i < parts.length; i++) {
+                var addr = parts[i].trim();
+                if (!/^\d+$/.test(addr))
+                    return _('Each address must be a non-negative integer.');
+                var num = parseInt(addr, 10);
+                if (num < 0 || num > 65535)
+                    return _('Each address must be between 0 and 65535.');
+            }
+            return true;
+        };
 
         o = s.option(form.Value, 'data_length', _('Register Count'), _('Number of registers to read/write. 1 register = 16 bits.'));
         o.depends('type', 'modbus-rtu');
