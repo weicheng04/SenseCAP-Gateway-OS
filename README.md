@@ -12,8 +12,6 @@ The system adopts an innovative lightweight architecture combining a Debian host
 
 [English](README.md) | [中文](README_zh-CN.md) | [日本語](README_ja.md) | [Français](README_fr.md) | [Português](README_pt.md) | [Español](README_es.md)
 
-![badges](docs/images/badges.png)
-
 ## Table of Contents
 
 - [Features](#features)
