@@ -274,7 +274,64 @@ The RS485 module supports industrial protocols including **Modbus RTU** and **BA
 
 ## Feeds Description
 
-<!-- TODO: Add feeds description table -->
+This project uses three custom OpenWrt feeds. They are defined in `feeds.conf.default` and installed into the OpenWrt build system via `./scripts/feeds update && ./scripts/feeds install`.
+
+### chirpstack
+
+ChirpStack LoRaWAN ecosystem integration, including the network server, concentrator daemon, packet forwarders, and their LuCI frontends.
+
+| Package | Description |
+|---------|-------------|
+| `chirpstack` | ChirpStack LoRaWAN network server |
+| `chirpstack-concentratord` | Concentrator packet-forwarder daemon (with per-hardware target builds) |
+| `chirpstack-mqtt-forwarder` | MQTT-based packet forwarder (single / slot1 / slot2 / mesh variants) |
+| `chirpstack-udp-forwarder` | UDP-based packet forwarder (single / slot1 / slot2 variants) |
+| `chirpstack-gateway-mesh` | LoRaWAN mesh networking extension |
+| `chirpstack-rest-api` | REST API service for ChirpStack |
+| `lorawan-devices` | LoRaWAN device profiles and codec definitions |
+| `node-red` | Node-RED visual automation platform |
+| `libloragw-sx1301 / sx1302 / 2g4` | Semtech LoRa HAL libraries |
+| `luci-app-chirpstack-*` | LuCI web interfaces for all ChirpStack components |
+| `luci-theme-argon` | Argon theme for LuCI |
+
+### lorawan-gateway
+
+Gateway hardware integration and backend system services.
+
+| Package | Description |
+|---------|-------------|
+| `lora` | LoRa radio stack service (Rust) |
+| `packetforwarder` | LoRa packet forwarder |
+| `chirpstack-concentratord-target-seeed-gateway` | Seeed gateway-specific concentrator build |
+| `chirpstack-gateway-bridge` | ChirpStack gateway bridge (MQTT/UDP backend) |
+| `basicstation_ubus` | Basic Station protocol with ubus RPC service |
+| `lte-serve` | LTE cellular module management service |
+| `rs485-module` | RS485 serial communication service (Rust) |
+| `rs485-modbus` | RS485 Modbus protocol implementation (Rust) |
+| `bacnet-stack` | BACnet protocol stack for building automation |
+| `ups-module` | UPS power management service (Rust) |
+| `hardware-info` | EEPROM reader for gateway SN, EUI, and hardware info |
+| `ubus-serve` | ubus RPC service for system management |
+| `wifi-module` | Auto WiFi configuration via USB drive detection |
+
+### luci-lorawan-gateway
+
+LuCI web interface applications and theme for gateway management.
+
+| Package | Description |
+|---------|-------------|
+| `luci-app-gateway` | Main gateway system configuration |
+| `luci-app-lora` | LoRa radio status and configuration |
+| `luci-app-chirpstack-concentratord-target-seeed-gateway` | Seeed gateway concentrator configuration |
+| `luci-app-lte` | LTE/4G cellular configuration |
+| `luci-app-multiwan` | Multi-WAN failover and load balancing |
+| `luci-app-routing` | Network routing configuration |
+| `luci-app-rs485` | RS485/Modbus interface configuration |
+| `luci-app-bacnet` | BACnet protocol configuration |
+| `luci-app-ups` | UPS power management |
+| `luci-app-ota` | OTA firmware upgrade |
+| `luci-app-terminal` | Web-based terminal console |
+| `luci-theme-sensecap` | SenseCAP custom theme |
 
 ## FAQ
 
