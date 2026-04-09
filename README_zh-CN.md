@@ -48,7 +48,16 @@ SenseCAP Gateway OS 是一款面向工业室内场景的多协议物联网网关
 
 ## 推荐硬件
 
-![reComputer R1225](docs/images/recommended_hardware.png)
+<p align="center">
+  <img src="docs/images/recommended_hardware.png" width="700" />
+</p>
+
+| **设备** | **链接** |
+| --- | --- |
+| reComputer R1225 LoRaWAN 网关 & 工业控制器 (US915-4G) | [购买](https://www.seeedstudio.com/reComputer-R1225-LoRaWAN-Gateway-Industrial-Controller-US915-4G-p-6721.html) |
+| reComputer R1225 LoRaWAN 网关 & 工业控制器 (US915) | [购买](https://www.seeedstudio.com/reComputer-R1225-LoRaWAN-Gateway-Industrial-Controller-US915-p-6722.html) |
+| reComputer R1225 LoRaWAN 网关 & 工业控制器 (EU868-4G) | [购买](https://www.seeedstudio.com/reComputer-R1225-LoRaWAN-Gateway-Industrial-Controller-EU868-4G-p-6719.html) |
+| reComputer R1225 LoRaWAN 网关 & 工业控制器 (EU868) | [购买](https://www.seeedstudio.com/reComputer-R1225-LoRaWAN-Gateway-Industrial-Controller-EU868-p-6720.html) |
 
 reComputer R1225 Wiki：<https://wiki.seeedstudio.com/r1225_introduction/>
 
@@ -275,7 +284,64 @@ RS485 模块支持的工业协议包括 **Modbus RTU** 和 **BACnet MS/TP**：
 
 ## Feeds 说明
 
-<!-- TODO: 添加 Feeds 说明表格 -->
+本项目使用三个自定义 OpenWrt feeds，定义在 `feeds.conf.default` 中，通过 `./scripts/feeds update && ./scripts/feeds install` 安装到 OpenWrt 构建系统。
+
+### chirpstack
+
+ChirpStack LoRaWAN 生态集成，包含网络服务器、集中器守护进程、数据包转发器及其 LuCI 前端。
+
+| 软件包 | 说明 |
+|--------|------|
+| `chirpstack` | ChirpStack LoRaWAN 网络服务器 |
+| `chirpstack-concentratord` | 集中器数据包转发守护进程（含各硬件平台适配构建） |
+| `chirpstack-mqtt-forwarder` | 基于 MQTT 的数据包转发器（single / slot1 / slot2 / mesh 变体） |
+| `chirpstack-udp-forwarder` | 基于 UDP 的数据包转发器（single / slot1 / slot2 变体） |
+| `chirpstack-gateway-mesh` | LoRaWAN Mesh 网络扩展 |
+| `chirpstack-rest-api` | ChirpStack REST API 服务 |
+| `lorawan-devices` | LoRaWAN 设备配置文件和编解码定义 |
+| `node-red` | Node-RED 可视化自动化平台 |
+| `libloragw-sx1301 / sx1302 / 2g4` | Semtech LoRa 硬件抽象层库 |
+| `luci-app-chirpstack-*` | 所有 ChirpStack 组件的 LuCI Web 界面 |
+| `luci-theme-argon` | LuCI Argon 主题 |
+
+### lorawan-gateway
+
+网关硬件集成和后端系统服务。
+
+| 软件包 | 说明 |
+|--------|------|
+| `lora` | LoRa 射频协议栈服务（Rust） |
+| `packetforwarder` | LoRa 数据包转发器 |
+| `chirpstack-concentratord-target-seeed-gateway` | Seeed 网关专用集中器构建 |
+| `chirpstack-gateway-bridge` | ChirpStack 网关桥接服务（MQTT/UDP 后端） |
+| `basicstation_ubus` | Basic Station 协议与 ubus RPC 服务 |
+| `lte-serve` | LTE 蜂窝模块管理服务 |
+| `rs485-module` | RS485 串口通信服务（Rust） |
+| `rs485-modbus` | RS485 Modbus 协议实现（Rust） |
+| `bacnet-stack` | BACnet 协议栈，用于楼宇自动化 |
+| `ups-module` | UPS 电源管理服务（Rust） |
+| `hardware-info` | EEPROM 读取工具，获取网关 SN、EUI 和硬件信息 |
+| `ubus-serve` | ubus RPC 系统管理服务 |
+| `wifi-module` | 通过 USB 设备自动配置 WiFi |
+
+### luci-lorawan-gateway
+
+网关管理的 LuCI Web 界面应用和主题。
+
+| 软件包 | 说明 |
+|--------|------|
+| `luci-app-gateway` | 网关系统主配置界面 |
+| `luci-app-lora` | LoRa 射频状态与配置 |
+| `luci-app-chirpstack-concentratord-target-seeed-gateway` | Seeed 网关集中器配置界面 |
+| `luci-app-lte` | LTE/4G 蜂窝网络配置 |
+| `luci-app-multiwan` | 多 WAN 故障切换与负载均衡 |
+| `luci-app-routing` | 网络路由配置 |
+| `luci-app-rs485` | RS485/Modbus 接口配置 |
+| `luci-app-bacnet` | BACnet 协议配置 |
+| `luci-app-ups` | UPS 电源管理 |
+| `luci-app-ota` | OTA 固件升级 |
+| `luci-app-terminal` | Web 终端控制台 |
+| `luci-theme-sensecap` | SenseCAP 自定义主题 |
 
 ## 常见问题
 
