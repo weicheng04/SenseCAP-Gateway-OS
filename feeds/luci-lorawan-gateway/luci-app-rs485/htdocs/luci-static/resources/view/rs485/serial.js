@@ -279,7 +279,18 @@ return view.extend({
     _maps: null,
 
     load: function() {
-        return uci.load('rs485-module');
+        return uci.load('rs485-module').then(function() {
+            var needSave = false;
+            for (var i = 1; i <= 3; i++) {
+                var sid = 'port' + i;
+                if (!uci.get('rs485-module', sid)) {
+                    uci.add('rs485-module', 'port', sid);
+                    needSave = true;
+                }
+            }
+            if (needSave)
+                return uci.save().then(function() { return uci.load('rs485-module'); });
+        });
     },
 
     render: function() {
