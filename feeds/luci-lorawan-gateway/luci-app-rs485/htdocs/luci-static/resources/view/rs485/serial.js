@@ -10,7 +10,7 @@
  * Build all options for one port Map
  * ------------------------------------------------------------------ */
 function buildPortMap(portNum) {
-    var portLabel = 'RS485-' + portNum;
+    var portLabel = 'CH' + portNum;
     var sid = 'port' + portNum;
 
     var m = new form.Map('rs485-module', '');
@@ -300,7 +300,7 @@ return view.extend({
             var tabBar = E('ul', { 'class': 'cbi-tabmenu' });
             mapEls.forEach(function(_, idx) {
                 var li = E('li', { 'class': idx === 0 ? 'cbi-tab' : 'cbi-tab-disabled' });
-                li.appendChild(E('a', { 'href': 'javascript:void(0)' }, 'RS485-' + (idx + 1)));
+                li.appendChild(E('a', { 'href': 'javascript:void(0)' }, 'CH' + (idx + 1)));
                 tabBar.appendChild(li);
             });
 
