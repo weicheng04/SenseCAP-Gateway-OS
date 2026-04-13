@@ -48,9 +48,10 @@ return view.extend({
         o.rmempty = false;
         o.depends({ mode: 'serverAndClientToken' });
 
-        o = s.taboption('general', form.Value, 'key', _('Private station key'));
+        o = s.taboption('general', form.FileUpload, 'key', _('Private station key'));
         o.optional = false;
         o.rmempty = false;
+        o.root_directory = '/etc/basicstation/certs/key';
         o.depends({ mode: 'serverAndClient' });
 
         o = s.taboption('general', form.FileUpload, 'crt', _('Private station certificate'));
