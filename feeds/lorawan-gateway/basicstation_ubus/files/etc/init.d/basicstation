@@ -207,7 +207,7 @@ parse_auth() {
 		[ -f "$buffer" ] && cp "$buffer" /tmp/basicstation/"$cred".trust
 		if [ "$mode" = 'serverAndClient' ]; then
 			config_get buffer "$section" key
-			echo "$buffer" > /tmp/basicstation/"$cred".key
+			[ -f "$buffer" ] && cp "$buffer" /tmp/basicstation/"$cred".key
 			config_get buffer "$section" crt
 			[ -f "$buffer" ] && cp "$buffer" /tmp/basicstation/"$cred".crt
 		elif [ "$mode" = 'serverAndClientToken' ]; then

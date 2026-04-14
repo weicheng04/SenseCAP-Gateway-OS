@@ -16,6 +16,10 @@
                     "list",
                     "read"
                 ],
+                "/etc/basicstation/certs/key/*": [
+                    "list",
+                    "read"
+                ],
                 "/etc/basicstation/certs/ca/*": [
                     "list",
                     "read"
@@ -54,6 +58,9 @@
                     "exec"
                 ],
                 "/etc/basicstation/certs/client/*": [
+                    "write"
+                ],
+                "/etc/basicstation/certs/key/*": [
                     "write"
                 ],
                 "/etc/basicstation/certs/ca/*": [
