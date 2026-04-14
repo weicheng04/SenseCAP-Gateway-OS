@@ -49,7 +49,8 @@ return view.extend({
         o.root_directory = '/etc/basicstation/token';
         o.depends({ mode: 'serverAndClientToken' });
 
-        o = s.taboption('general', form.FileUpload, 'key', _('Private station key'));
+        o = s.taboption('general', form.FileUpload, 'key', _('Private station key'),
+            _('Please upload a file in .key.pem format'));
         o.optional = false;
         o.rmempty = false;
         o.root_directory = '/etc/basicstation/certs/key';
@@ -86,6 +87,13 @@ return view.extend({
         var whitelist_devaddr_max = s.taboption('packet_filter', form.Value, "whitelist_devaddr_max", _("Devaddr Max"),_("Please enter four-byte hexadecimal, eg: SenseCAP TTN Devaddr min is '2701FFFF'"))
         whitelist_devaddr_max.default = "00000000"
         whitelist_devaddr_max.datatype = "hexstring"
+
+        if (!document.getElementById('basicstation-hide-path')) {
+            var style = document.createElement('style');
+            style.id = 'basicstation-hide-path';
+            style.textContent = '.cbi-filebrowser > p:first-child { display: none; }';
+            document.head.appendChild(style);
+        }
 
         return mMap;
     }
