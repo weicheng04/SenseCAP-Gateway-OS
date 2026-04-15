@@ -5,42 +5,75 @@
 'require ui';
 
 /* ------------------------------------------------------------------
- * Build serial port options for one port
+ * Build MQTT options for one port
  * ------------------------------------------------------------------ */
 function buildPortMap(portNum) {
     var sid = 'port' + portNum;
+    var portLabel = 'CH' + portNum;
 
     var m = new form.Map('rs485-module', '');
 
-    var s = m.section(form.NamedSection, sid, 'port', _('Serial Port Configuration'));
+    var s = m.section(form.NamedSection, sid, 'port', _('MQTT Settings'));
     s.addremove = false;
     var o;
 
-    o = s.option(form.ListValue, 'baudrate', _('Baud Rate'));
-    ['1200','2400','4800','9600','19200','38400','57600','115200'].forEach(function(v) {
-        o.value(v, v);
-    });
-    o.default = '9600';
+    o = s.option(form.ListValue, 'mqtt_transport', _('Transport'));
+    o.value('tcp','TCP'); o.value('ssl','SSL/TLS'); o.value('ws','WebSocket'); o.value('wss','WebSocket Secure');
+    o.default = 'tcp';
 
-    o = s.option(form.ListValue, 'databit', _('Data Bits'));
-    ['5','6','7','8'].forEach(function(v) { o.value(v, v); });
-    o.default = '8';
+    o = s.option(form.Value, 'mqtt_host', _('Server Address'));
+    o.datatype = 'or(hostname,ipaddr)'; o.placeholder = 'mqtt.example.com'; o.rmempty = false;
 
-    o = s.option(form.ListValue, 'stopbit', _('Stop Bits'));
-    o.value('1', '1'); o.value('2', '2');
+    o = s.option(form.Value, 'mqtt_port', _('Server Port'));
+    o.datatype = 'port'; o.placeholder = '1883'; o.default = '1883';
+
+    o = s.option(form.Value, 'mqtt_client_id', _('Client ID'));
+    o.datatype = 'maxlength(32)'; o.placeholder = 'gateway-rs485-' + portNum;
+
+    o = s.option(form.Value, 'mqtt_keepalive', _('Keep Alive (s)'));
+    o.datatype = 'range(5,120)'; o.placeholder = '30'; o.default = '30';
+
+    o = s.option(form.Value, 'mqtt_username', _('Username'));
+    o.optional = true;
+
+    o = s.option(form.Value, 'mqtt_password', _('Password'));
+    o.password = true; o.optional = true;
+
+    o = s.option(form.ListValue, 'mqtt_auth_mode', _('Authentication Mode'));
+    o.value('none', _('Username/Password Only')); o.value('tls-server', _('TLS Server Verification'));
+    o.value('mutual-tls', _('Mutual TLS')); o.value('token', _('Token Authentication'));
+    o.default = 'none';
+
+    o = s.option(form.FileUpload, 'mqtt_ca_cert', _('CA Certificate'));
+    o.depends('mqtt_auth_mode', 'tls-server');
+    o.depends('mqtt_auth_mode', 'mutual-tls'); o.optional = true;
+
+    o = s.option(form.FileUpload, 'mqtt_client_cert', _('Client Certificate'));
+    o.depends('mqtt_auth_mode', 'mutual-tls'); o.optional = true;
+
+    o = s.option(form.FileUpload, 'mqtt_client_key', _('Client Private Key'));
+    o.depends('mqtt_auth_mode', 'mutual-tls'); o.optional = true;
+
+    o = s.option(form.Value, 'mqtt_token', _('Access Token'));
+    o.depends('mqtt_auth_mode', 'token'); o.optional = true;
+
+    o = s.option(form.Value, 'mqtt_uplink_topic', _('Uplink Topic'));
+    o.placeholder = 'rs485/' + portLabel + '/uplink';
+    o.default    = 'rs485/' + portLabel + '/uplink';
+
+    o = s.option(form.Value, 'mqtt_downlink_topic', _('Downlink Topic'));
+    o.placeholder = 'rs485/' + portLabel + '/downlink';
+    o.default    = 'rs485/' + portLabel + '/downlink';
+
+    o = s.option(form.ListValue, 'mqtt_qos', _('QoS Level'));
+    o.value('0','0 - At most once'); o.value('1','1 - At least once'); o.value('2','2 - Exactly once');
+    o.default = '0';
+
+    o = s.option(form.Flag, 'mqtt_clean_session', _('Clean Session'));
     o.default = '1';
 
-    o = s.option(form.ListValue, 'checkbit', _('Parity'));
-    o.value('none', _('None')); o.value('odd', _('Odd')); o.value('even', _('Even'));
-    o.default = 'none';
-
-    o = s.option(form.ListValue, 'flowcontrol', _('Flow Control'));
-    o.value('none', _('None')); o.value('rtscts', _('RTS/CTS')); o.value('xonxoff', _('XON/XOFF'));
-    o.default = 'none';
-
-    o = s.option(form.Value, 'timeout', _('Read Timeout (ms)'));
-    o.datatype = 'range(100,10000)';
-    o.placeholder = '1000'; o.default = '1000';
+    o = s.option(form.Value, 'mqtt_reconnect_delay', _('Reconnect Delay (s)'));
+    o.datatype = 'range(1,120)'; o.placeholder = '5'; o.default = '5';
 
     return m;
 }
@@ -99,10 +132,10 @@ return view.extend({
                 });
             });
 
-            var wrapper = E('div', { 'class': 'cbi-map', 'id': 'rs485-tabs-wrapper' }, [
-                E('h2', {}, _('Serial Settings')),
+            var wrapper = E('div', { 'class': 'cbi-map', 'id': 'rs485-mqtt-tabs-wrapper' }, [
+                E('h2', {}, _('MQTT Settings')),
                 E('div', { 'class': 'cbi-map-descr' },
-                    _('Configure each RS485 port independently.')),
+                    _('Configure MQTT bridge parameters for each RS485 port.')),
                 tabBar
             ]);
             mapEls.forEach(function(el) { wrapper.appendChild(el); });
