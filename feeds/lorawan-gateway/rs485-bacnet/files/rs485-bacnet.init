@@ -4,7 +4,7 @@ START=99
 STOP=10
 
 USE_PROCD=1
-PROG=/usr/bin/rs485-modbus
+PROG=/usr/bin/rs485-bacnet
 
 start_service() {
     local port_num protocol_enabled protocol_type
@@ -14,7 +14,7 @@ start_service() {
         protocol_type=$(uci -q get rs485-module.port${port_num}.protocol)
 
         [ "$protocol_enabled" = "1" ] || continue
-        [ "$protocol_type" = "modbus-rtu" ] || continue
+        [ "$protocol_type" = "bacnet-mstp" ] || continue
 
         procd_open_instance "port${port_num}"
         procd_set_param command $PROG "$port_num"

@@ -139,8 +139,21 @@ function buildPortMaps(portNum) {
             var n=0, timer=setInterval(function(){
                 n++;
                 L.resolveDefault(fs.read('/tmp/rs485/modbus_result_'+portNum)).then(function(c){
-                    if(c){clearInterval(timer);if(resultArea){if(c.startsWith('Error:')){resultArea.value=c;resultArea.style.color='#d00';}else{try{resultArea.value=JSON.stringify(JSON.parse(c),null,4);}catch(e){resultArea.value=c;}resultArea.style.color='';}}btn.disabled=false;btn.innerText=_('Read Data');fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/modbus_read_'+portNum+' /tmp/rs485/modbus_result_'+portNum]);}
-                }).catch(function(){if(n>=50){clearInterval(timer);if(resultArea){resultArea.value='Timeout: No response from Modbus device';resultArea.style.color='#d00';}btn.disabled=false;btn.innerText=_('Read Data');}});
+                    if(c){
+                        clearInterval(timer);
+                        if(resultArea){
+                            if(c.startsWith('Error:')){resultArea.value=c;resultArea.style.color='#d00';}
+                            else{try{resultArea.value=JSON.stringify(JSON.parse(c),null,4);}catch(e){resultArea.value=c;}resultArea.style.color='';}
+                        }
+                        btn.disabled=false;btn.innerText=_('Read Data');
+                        fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/modbus_read_'+portNum+' /tmp/rs485/modbus_result_'+portNum]);
+                    } else if(n>=150){
+                        clearInterval(timer);
+                        if(resultArea){resultArea.value='Timeout: No response from Modbus device';resultArea.style.color='#d00';}
+                        btn.disabled=false;btn.innerText=_('Read Data');
+                        fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/modbus_read_'+portNum+' /tmp/rs485/modbus_result_'+portNum]);
+                    }
+                });
             },100);
         });
     }, this);
@@ -161,8 +174,21 @@ function buildPortMaps(portNum) {
             var n=0, timer=setInterval(function(){
                 n++;
                 L.resolveDefault(fs.read('/tmp/rs485/modbus_result_'+portNum)).then(function(c){
-                    if(c){clearInterval(timer);if(resultArea){if(c.startsWith('Error:')){resultArea.value=c;resultArea.style.color='#d00';}else{try{resultArea.value=JSON.stringify(JSON.parse(c),null,4);}catch(e){resultArea.value=c;}resultArea.style.color='';}}btn.disabled=false;btn.innerText=_('Write Data');fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/modbus_write_'+portNum+' /tmp/rs485/modbus_result_'+portNum]);}
-                }).catch(function(){if(n>=50){clearInterval(timer);if(resultArea){resultArea.value='Timeout: No response from Modbus device';resultArea.style.color='#d00';}btn.disabled=false;btn.innerText=_('Write Data');}});
+                    if(c){
+                        clearInterval(timer);
+                        if(resultArea){
+                            if(c.startsWith('Error:')){resultArea.value=c;resultArea.style.color='#d00';}
+                            else{try{resultArea.value=JSON.stringify(JSON.parse(c),null,4);}catch(e){resultArea.value=c;}resultArea.style.color='';}
+                        }
+                        btn.disabled=false;btn.innerText=_('Write Data');
+                        fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/modbus_write_'+portNum+' /tmp/rs485/modbus_result_'+portNum]);
+                    } else if(n>=150){
+                        clearInterval(timer);
+                        if(resultArea){resultArea.value='Timeout: No response from Modbus device';resultArea.style.color='#d00';}
+                        btn.disabled=false;btn.innerText=_('Write Data');
+                        fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/modbus_write_'+portNum+' /tmp/rs485/modbus_result_'+portNum]);
+                    }
+                });
             },100);
         });
     }, this);
@@ -199,6 +225,46 @@ function buildPortMaps(portNum) {
     o = sb.option(form.Value, 'bacnet_device_name', _('Device Name'),
         _('Human-readable name for this BACnet device.'));
     o.placeholder = 'SenseCAP Gateway'; o.default = 'SenseCAP Gateway';
+
+    o = sb.option(form.Button, '_bacnet_read_btn', _('Discover & Read'));
+    o.inputtitle = _('Read Data'); o.inputstyle = 'apply';
+    o.onclick = L.bind(function(ev) {
+        var btn = ev.target;
+        var resultArea = document.getElementById('bacnet_result_' + portNum);
+        btn.disabled = true; btn.innerText = _('Discovering...');
+        fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/bacnet_read_'+portNum+' /tmp/rs485/bacnet_result_'+portNum])
+        .then(function(){return fs.exec('/bin/sh',['-c','mkdir -p /tmp/rs485 && touch /tmp/rs485/bacnet_read_'+portNum]);})
+        .then(function(){
+            var n=0, timer=setInterval(function(){
+                n++;
+                L.resolveDefault(fs.read('/tmp/rs485/bacnet_result_'+portNum)).then(function(c){
+                    if(c){
+                        clearInterval(timer);
+                        if(resultArea){
+                            if(c.startsWith('Error:')){resultArea.value=c;resultArea.style.color='#d00';}
+                            else{try{resultArea.value=JSON.stringify(JSON.parse(c),null,4);}catch(e){resultArea.value=c;}resultArea.style.color='';}
+                        }
+                        btn.disabled=false;btn.innerText=_('Read Data');
+                        fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/bacnet_read_'+portNum+' /tmp/rs485/bacnet_result_'+portNum]);
+                    } else if(n>=450){
+                        clearInterval(timer);
+                        if(resultArea){resultArea.value='Timeout: No BACnet device discovered';resultArea.style.color='#d00';}
+                        btn.disabled=false;btn.innerText=_('Read Data');
+                        fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/bacnet_read_'+portNum+' /tmp/rs485/bacnet_result_'+portNum]);
+                    }
+                });
+            },100);
+        });
+    }, this);
+
+    o = sb.option(form.DummyValue, '_bacnet_result', _('Device Data'));
+    o.rawhtml = true;
+    o.cfgvalue = function() {
+        return '<textarea id="bacnet_result_' + portNum + '" readonly ' +
+            'style="width:100%;min-height:150px;font-family:monospace;font-size:13px;' +
+            'padding:8px;border:1px solid #ccc;border-radius:4px;white-space:pre;" ' +
+            'placeholder="BACnet device data will appear here..."></textarea>';
+    };
 
     maps.push(m2);
 

@@ -22,7 +22,7 @@ function buildPortMap(portNum) {
     o.default = 'tcp';
 
     o = s.option(form.Value, 'mqtt_host', _('Server Address'));
-    o.datatype = 'or(hostname,ipaddr)'; o.placeholder = 'mqtt.example.com'; o.rmempty = false;
+    o.datatype = 'or(hostname,ipaddr)'; o.placeholder = 'mqtt.example.com';
 
     o = s.option(form.Value, 'mqtt_port', _('Server Port'));
     o.datatype = 'port'; o.placeholder = '1883'; o.default = '1883';
