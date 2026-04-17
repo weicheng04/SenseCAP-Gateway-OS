@@ -3,10 +3,7 @@
 		"description": "Grant access to rs485 configuration",
 		"read": {
 			"file": {
-				"/tmp/rs485/log": [
-					"read"
-				],
-				"/tmp/rs485/modbus_result": [
+				"/tmp/rs485/*": [
 					"read"
 				]
 			},
