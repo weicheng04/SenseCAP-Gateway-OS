@@ -14,6 +14,81 @@ function buildPortMaps(portNum) {
     var sid = 'port' + portNum;
     var maps = [];
 
+    function ensureExecSuccess(result, action) {
+        if (!result || typeof result.code !== 'number' || result.code === 0)
+            return result;
+
+        var details = (result.stderr || result.stdout || '').trim();
+        throw new Error(details ? (action + ': ' + details) : action);
+    }
+
+    function shellQuote(value) {
+        return "'" + String(value).replace(/'/g, "'\\''") + "'";
+    }
+
+    function getManualBacnetValue(field) {
+        var input = document.getElementById('bacnet_' + field + '_' + portNum);
+        return input ? input.value.trim() : '';
+    }
+
+    function setBacnetResult(resultArea, message, isError) {
+        if (!resultArea)
+            return;
+
+        resultArea.value = message;
+        resultArea.style.color = isError ? '#d00' : '';
+    }
+
+    function parseOptionalInteger(value, label) {
+        if (value === '')
+            return null;
+
+        if (!/^\d+$/.test(value))
+            throw new Error(label + ' ' + _('must be a non-negative integer.'));
+
+        return parseInt(value, 10);
+    }
+
+    function buildBacnetRequestPayload() {
+        var targetDevice = getManualBacnetValue('target_device');
+        var objectType = getManualBacnetValue('object_type');
+        var objectInstance = getManualBacnetValue('object_instance');
+        var property = getManualBacnetValue('property');
+        var arrayIndex = getManualBacnetValue('array_index');
+        var hasPropertyRequest = objectType !== '' || objectInstance !== '' || property !== '' || arrayIndex !== '';
+
+        if (hasPropertyRequest && (objectType === '' || objectInstance === '' || property === '')) {
+            throw new Error(_('Targeted BACnet reads require Object Type, Object Instance, and Property.'));
+        }
+
+        var payload = {};
+        var parsedTargetDevice = parseOptionalInteger(targetDevice, _('Target Device Instance'));
+        var parsedObjectInstance = parseOptionalInteger(objectInstance, _('Object Instance'));
+        var parsedArrayIndex = parseOptionalInteger(arrayIndex, _('Array Index'));
+
+        if (parsedTargetDevice !== null)
+            payload.target_device_instance = parsedTargetDevice;
+        if (objectType !== '')
+            payload.object_type = objectType;
+        if (parsedObjectInstance !== null)
+            payload.object_instance = parsedObjectInstance;
+        if (property !== '')
+            payload.property = property;
+        if (parsedArrayIndex !== null)
+            payload.array_index = parsedArrayIndex;
+
+        return payload;
+    }
+
+    function writeBacnetRequestFile(requestPath, payload) {
+        return fs.exec('/bin/sh', ['-c',
+            'mkdir -p /tmp/rs485 && printf %s ' + shellQuote(JSON.stringify(payload)) +
+            ' > ' + shellQuote(requestPath)
+        ]).then(function(result) {
+            return ensureExecSuccess(result, _('Failed to write BACnet request'));
+        });
+    }
+
     /* ===== Map 1: Protocol Configuration ===== */
     var m1 = new form.Map('rs485-module', '');
     var s1 = m1.section(form.NamedSection, sid, 'port', _('Protocol Configuration'));
@@ -207,8 +282,8 @@ function buildPortMaps(portNum) {
     sb.addremove = false;
 
     o = sb.option(form.Value, 'bacnet_mac_address', _('MAC Address'),
-        _('BACnet MS/TP MAC address (0-127).'));
-    o.datatype = 'range(0,127)'; o.placeholder = '1'; o.default = '1';
+        _('BACnet MS/TP master MAC address for the gateway (0-127). It must be unique on the RS485 bus and must not match the target device MAC.'));
+    o.datatype = 'range(0,127)'; o.placeholder = '10'; o.default = '10';
 
     o = sb.option(form.Value, 'bacnet_max_master', _('Max Master'),
         _('Maximum MS/TP master address on the network (1-127).'));
@@ -226,18 +301,80 @@ function buildPortMaps(portNum) {
         _('Human-readable name for this BACnet device.'));
     o.placeholder = 'SenseCAP Gateway'; o.default = 'SenseCAP Gateway';
 
-    o = sb.option(form.Button, '_bacnet_read_btn', _('Discover & Read'));
+    o = sb.option(form.Value, 'bacnet_poll_interval', _('Poll Interval (s)'),
+        _('Interval between BACnet polling cycles. Must be an integer between 1 and 3600.'));
+    o.datatype = 'range(1,3600)'; o.placeholder = '10'; o.default = '10'; o.rmempty = false;
+
+    o = sb.option(form.DummyValue, '_bacnet_targeted_read', _('Targeted Read Options'));
+    o.rawhtml = true;
+    o.cfgvalue = function() {
+        return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">' +
+            '<div><label style="display:block;font-weight:600;margin-bottom:4px;">' + _('Target Device Instance') + '</label>' +
+            '<input id="bacnet_target_device_' + portNum + '" type="text" placeholder="1" ' +
+            'style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" />' +
+            '<div style="margin-top:4px;color:#666;font-size:12px;">' + _('Optional remote BACnet device instance. Leave blank to read all discovered devices.') + '</div></div>' +
+            '<div><label style="display:block;font-weight:600;margin-bottom:4px;">' + _('Object Type') + '</label>' +
+            '<input id="bacnet_object_type_' + portNum + '" type="text" placeholder="analog-input or 0" ' +
+            'style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" />' +
+            '<div style="margin-top:4px;color:#666;font-size:12px;">' + _('Optional. Fill this together with Object Instance and Property to issue a targeted ReadProperty.') + '</div></div>' +
+            '<div><label style="display:block;font-weight:600;margin-bottom:4px;">' + _('Object Instance') + '</label>' +
+            '<input id="bacnet_object_instance_' + portNum + '" type="text" placeholder="0" ' +
+            'style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" />' +
+            '<div style="margin-top:4px;color:#666;font-size:12px;">' + _('Object instance number for the targeted object.') + '</div></div>' +
+            '<div><label style="display:block;font-weight:600;margin-bottom:4px;">' + _('Property') + '</label>' +
+            '<input id="bacnet_property_' + portNum + '" type="text" placeholder="present-value or 85" ' +
+            'style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" />' +
+            '<div style="margin-top:4px;color:#666;font-size:12px;">' + _('Property name or BACnet property ID.') + '</div></div>' +
+            '<div><label style="display:block;font-weight:600;margin-bottom:4px;">' + _('Array Index') + '</label>' +
+            '<input id="bacnet_array_index_' + portNum + '" type="text" placeholder="optional" ' +
+            'style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" />' +
+            '<div style="margin-top:4px;color:#666;font-size:12px;">' + _('Optional BACnet array index for array-valued properties.') + '</div></div>' +
+        '</div>';
+    };
+
+    o = sb.option(form.Button, '_bacnet_read_btn', _('Read Data'));
     o.inputtitle = _('Read Data'); o.inputstyle = 'apply';
     o.onclick = L.bind(function(ev) {
         var btn = ev.target;
         var resultArea = document.getElementById('bacnet_result_' + portNum);
-        btn.disabled = true; btn.innerText = _('Discovering...');
-        fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/bacnet_read_'+portNum+' /tmp/rs485/bacnet_result_'+portNum])
-        .then(function(){return fs.exec('/bin/sh',['-c','mkdir -p /tmp/rs485 && touch /tmp/rs485/bacnet_read_'+portNum]);})
+        var triggerPath = '/tmp/rs485/bacnet_read_' + portNum;
+        var resultPath = '/tmp/rs485/bacnet_result_' + portNum;
+        var requestPath = '/tmp/rs485/bacnet_request_' + portNum;
+        var requestPayload;
+
+        try {
+            requestPayload = buildBacnetRequestPayload();
+        } catch (err) {
+            setBacnetResult(resultArea, err.message || String(err), true);
+            btn.disabled = false;
+            btn.innerText = _('Read Data');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerText = Object.keys(requestPayload).length > 0 ? _('Reading...') : _('Discovering...');
+
+        fs.exec('/bin/sh',['-c','rm -f ' + triggerPath + ' ' + resultPath + ' ' + requestPath])
+        .then(function(result) {
+            return ensureExecSuccess(result, _('Failed to clean previous BACnet state'));
+        })
+        .then(function(){
+            if (Object.keys(requestPayload).length > 0)
+                return writeBacnetRequestFile(requestPath, requestPayload);
+
+            return fs.exec('/bin/sh',['-c','mkdir -p /tmp/rs485']).then(function(result) {
+                return ensureExecSuccess(result, _('Failed to prepare BACnet request directory'));
+            });
+        })
+        .then(function(){
+            return fs.exec('/bin/sh',['-c','mkdir -p /tmp/rs485 && touch ' + triggerPath]).then(function(result) {
+                return ensureExecSuccess(result, _('Failed to trigger BACnet read'));
+            });
+        })
         .then(function(){
             var n=0, timer=setInterval(function(){
                 n++;
-                L.resolveDefault(fs.read('/tmp/rs485/bacnet_result_'+portNum)).then(function(c){
+                L.resolveDefault(fs.read(resultPath)).then(function(c){
                     if(c){
                         clearInterval(timer);
                         if(resultArea){
@@ -245,15 +382,25 @@ function buildPortMaps(portNum) {
                             else{try{resultArea.value=JSON.stringify(JSON.parse(c),null,4);}catch(e){resultArea.value=c;}resultArea.style.color='';}
                         }
                         btn.disabled=false;btn.innerText=_('Read Data');
-                        fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/bacnet_read_'+portNum+' /tmp/rs485/bacnet_result_'+portNum]);
+                        fs.exec('/bin/sh',['-c','rm -f ' + triggerPath + ' ' + resultPath + ' ' + requestPath]);
                     } else if(n>=450){
                         clearInterval(timer);
-                        if(resultArea){resultArea.value='Timeout: No BACnet device discovered';resultArea.style.color='#d00';}
+                        if(resultArea){resultArea.value='Timeout: No BACnet data returned';resultArea.style.color='#d00';}
                         btn.disabled=false;btn.innerText=_('Read Data');
-                        fs.exec('/bin/sh',['-c','rm -f /tmp/rs485/bacnet_read_'+portNum+' /tmp/rs485/bacnet_result_'+portNum]);
+                        fs.exec('/bin/sh',['-c','rm -f ' + triggerPath + ' ' + resultPath + ' ' + requestPath]);
                     }
                 });
             },100);
+        })
+        .catch(function(err) {
+            setBacnetResult(
+                resultArea,
+                (_('Failed to start BACnet read') + ': ' + ((err && err.message) ? err.message : String(err))),
+                true
+            );
+            btn.disabled = false;
+            btn.innerText = _('Read Data');
+            fs.exec('/bin/sh',['-c','rm -f ' + triggerPath + ' ' + resultPath + ' ' + requestPath]);
         });
     }, this);
 

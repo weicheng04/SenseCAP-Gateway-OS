@@ -4,11 +4,12 @@ use rumqttc::tokio_rustls::rustls::ClientConfig as RustlsClientConfig;
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::BTreeSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::process::Command;
 use std::sync::{Arc, Mutex as StdMutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::process::Command as TokioCommand;
 use tokio::time::sleep;
 use std::path::Path;
@@ -55,6 +56,138 @@ struct BacnetConfig {
     device_instance: u32,
     device_name: String,
     poll_interval: u64,
+}
+
+const DEFAULT_BACNET_LOCAL_MAC: u8 = 10;
+const DEFAULT_BACNET_APDU_TIMEOUT_MS: u64 = 15000;
+const DEFAULT_BACNET_DISCOVERY_TIMEOUT_MS: u64 = 15000;
+const DEFAULT_BACNET_DISCOVERY_DELAY_MS: u64 = 3000;
+const BACNET_DEVICE_CACHE_TTL_SECS: u64 = 60;
+const MIN_MQTT_KEEPALIVE_SECS: u64 = 120;
+const MQTT_PUBLISH_FLUSH_WINDOW_MS: u64 = 1000;
+const DEVICE_OBJECT_TYPE: &str = "8";
+const PROP_OBJECT_NAME: &str = "77";
+
+#[derive(Debug, Default)]
+struct BacnetRuntimeState {
+    summary_only_devices: BTreeSet<u32>,
+    cached_devices: Vec<u32>,
+    cached_devices_at: Option<Instant>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct BacnetReadRequest {
+    #[serde(default)]
+    target_device_instance: Option<u32>,
+    #[serde(default)]
+    object_type: Option<String>,
+    #[serde(default)]
+    object_instance: Option<u32>,
+    #[serde(default)]
+    property: Option<String>,
+    #[serde(default)]
+    array_index: Option<u32>,
+}
+
+impl BacnetReadRequest {
+    fn normalized(mut self) -> Self {
+        self.object_type = self.object_type.take().and_then(normalize_request_token);
+        self.property = self.property.take().and_then(normalize_request_token);
+        self
+    }
+
+    fn has_any_fields(&self) -> bool {
+        self.target_device_instance.is_some()
+            || self.object_type.is_some()
+            || self.object_instance.is_some()
+            || self.property.is_some()
+            || self.array_index.is_some()
+    }
+
+    fn has_property_request(&self) -> bool {
+        self.object_type.is_some()
+            || self.object_instance.is_some()
+            || self.property.is_some()
+            || self.array_index.is_some()
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        if self.has_property_request()
+            && (self.object_type.is_none()
+                || self.object_instance.is_none()
+                || self.property.is_none())
+        {
+            return Err(
+                "targeted BACnet reads require object_type, object_instance, and property"
+                    .to_string(),
+            );
+        }
+
+        Ok(())
+    }
+
+    fn describe(&self) -> String {
+        if self.has_property_request() {
+            let mut description = format!(
+                "device={:?}, object_type={}, object_instance={}, property={}",
+                self.target_device_instance,
+                self.object_type.as_deref().unwrap_or(""),
+                self.object_instance.unwrap_or_default(),
+                self.property.as_deref().unwrap_or(""),
+            );
+
+            if let Some(array_index) = self.array_index {
+                description.push_str(&format!(", array_index={}", array_index));
+            }
+
+            description
+        } else if let Some(device_instance) = self.target_device_instance {
+            format!("device={}", device_instance)
+        } else {
+            "summary".to_string()
+        }
+    }
+}
+
+fn normalize_request_token(value: String) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+impl BacnetRuntimeState {
+    fn cache_devices(&mut self, devices: &[u32]) {
+        self.cached_devices = devices.to_vec();
+        self.cached_devices_at = Some(Instant::now());
+    }
+
+    fn cached_devices(&self) -> Option<Vec<u32>> {
+        let cached_at = self.cached_devices_at?;
+        if self.cached_devices.is_empty() {
+            return None;
+        }
+        if cached_at.elapsed() > Duration::from_secs(BACNET_DEVICE_CACHE_TTL_SECS) {
+            return None;
+        }
+
+        Some(self.cached_devices.clone())
+    }
+
+    fn clear_cached_devices(&mut self) {
+        self.cached_devices.clear();
+        self.cached_devices_at = None;
+    }
+
+    fn mark_summary_only(&mut self, device_instance: u32) {
+        self.summary_only_devices.insert(device_instance);
+    }
+
+    fn prefers_summary_only(&self, device_instance: u32) -> bool {
+        self.summary_only_devices.contains(&device_instance)
+    }
 }
 
 // MQTT Message Structures
@@ -138,6 +271,173 @@ fn build_bacnet_error_uplink(
     serde_json::to_string(&msg).unwrap_or_else(|_| "{{\"error\":\"serialization failed\"}}".to_string())
 }
 
+fn configure_bacnet_command<'a>(
+    command: &'a mut TokioCommand,
+    config: &Config,
+) -> &'a mut TokioCommand {
+    command
+        .env("BACNET_DATALINK", "mstp")
+        .env("BACNET_IFACE", &config.serial.device)
+        .env("BACNET_MSTP_BAUD", config.serial.baudrate.to_string())
+        .env("BACNET_MSTP_MAC", config.bacnet.mac_address.to_string())
+        .env("BACNET_MAX_MASTER", config.bacnet.max_master.to_string())
+        .env(
+            "BACNET_MAX_INFO_FRAMES",
+            config.bacnet.max_info_frames.to_string(),
+        )
+        .env(
+            "BACNET_APDU_TIMEOUT",
+            DEFAULT_BACNET_APDU_TIMEOUT_MS.to_string(),
+        )
+}
+
+fn parse_discovered_devices(stdout: &str) -> Vec<u32> {
+    let mut devices = BTreeSet::new();
+
+    for raw_line in stdout.lines() {
+        let line = raw_line.trim();
+
+        if line.is_empty() || line.starts_with(';') {
+            continue;
+        }
+
+        let parsed = if line.contains(';') {
+            line.split(';')
+                .next()
+                .and_then(|token| token.trim().parse::<u32>().ok())
+        } else {
+            line.split_whitespace()
+                .next()
+                .and_then(|token| token.parse::<u32>().ok())
+        };
+
+        if let Some(instance) = parsed {
+            devices.insert(instance);
+        }
+    }
+
+    devices.into_iter().collect()
+}
+
+fn is_bacnet_cli_noise_line(line: &str) -> bool {
+    line.starts_with("MS/TP Interface:")
+        || line.starts_with("RS485 Interface:")
+        || line.starts_with("RS485 Baud Rate")
+        || line.starts_with("MS/TP MAC:")
+        || line.starts_with("MS/TP Max_Master:")
+        || line.starts_with("MS/TP Max_Info_Frames:")
+        || line.starts_with("MS/TP RxBuf[")
+        || line.starts_with("MS/TP SlaveModeEnabled:")
+        || line.starts_with("MS/TP ZeroConfigEnabled:")
+        || line.starts_with("MS/TP CheckAutoBaud:")
+        || line.starts_with("DLMSTP:")
+}
+
+fn sanitize_bacnet_cli_output(stdout: &str) -> String {
+    stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter(|line| !is_bacnet_cli_noise_line(line))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn load_trigger_read_request(
+    request_path: &str,
+    logger: &Logger,
+) -> Result<Option<BacnetReadRequest>, String> {
+    if !Path::new(request_path).exists() {
+        return Ok(None);
+    }
+
+    let request_contents = fs::read_to_string(request_path)
+        .map_err(|e| format!("failed to read BACnet request: {}", e))?;
+    let _ = fs::remove_file(request_path);
+
+    if request_contents.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let request = serde_json::from_str::<BacnetReadRequest>(&request_contents)
+        .map_err(|e| format!("invalid BACnet request JSON: {}", e))?
+        .normalized();
+
+    if !request.has_any_fields() {
+        return Ok(None);
+    }
+
+    request.validate()?;
+    logger.log(&format!(
+        "Received BACnet manual read request: {}",
+        request.describe()
+    ));
+
+    Ok(Some(request))
+}
+
+async fn flush_mqtt_after_publish(
+    mqtt_eventloop: Option<&mut rumqttc::EventLoop>,
+    logger: &Logger,
+    topic: &str,
+) -> bool {
+    let Some(eventloop) = mqtt_eventloop else {
+        return true;
+    };
+
+    let deadline = tokio::time::Instant::now()
+        + Duration::from_millis(MQTT_PUBLISH_FLUSH_WINDOW_MS);
+
+    while tokio::time::Instant::now() < deadline {
+        match tokio::time::timeout(Duration::from_millis(200), eventloop.poll()).await {
+            Ok(Ok(Event::Incoming(Incoming::ConnAck(_)))) => {
+                logger.log(&format!("MQTT connected, uplink topic: {}", topic));
+            }
+            Ok(Ok(Event::Incoming(Incoming::Disconnect))) => {
+                logger.log("MQTT disconnected");
+                return false;
+            }
+            Ok(Ok(Event::Outgoing(_))) => {
+                return true;
+            }
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => {
+                logger.log(&format!("MQTT error: {}", e));
+                return false;
+            }
+            Err(_) => {
+                break;
+            }
+        }
+    }
+
+    true
+}
+
+async fn publish_mqtt_payload(
+    client: &AsyncClient,
+    mqtt_eventloop: Option<&mut rumqttc::EventLoop>,
+    topic: &str,
+    qos: QoS,
+    payload: &str,
+    logger: &Logger,
+) -> bool {
+    match client.publish(topic, qos, false, payload.as_bytes()).await {
+        Ok(_) => {
+            if flush_mqtt_after_publish(mqtt_eventloop, logger, topic).await {
+                logger.log(&format!("Published to MQTT: {}", topic));
+                true
+            } else {
+                false
+            }
+        }
+        Err(e) => {
+            logger.log(&format!("MQTT publish failed: {}", e));
+            false
+        }
+    }
+}
+
 // Logger Structure
 struct Logger {
     file: StdMutex<Option<File>>,
@@ -206,7 +506,8 @@ fn load_config_from_uci(port_num: u8) -> Result<Config, Box<dyn std::error::Erro
     let keepalive = uci_get("rs485-module", &sid, "mqtt_keepalive")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(30);
+        .unwrap_or(30)
+        .max(MIN_MQTT_KEEPALIVE_SECS);
     let uplink_topic = uci_get("rs485-module", &sid, "mqtt_uplink_topic")
         .unwrap_or_else(|_| format!("rs485/CH{}/uplink", port_num));
     let qos_level = uci_get("rs485-module", &sid, "mqtt_qos")
@@ -262,7 +563,7 @@ fn load_config_from_uci(port_num: u8) -> Result<Config, Box<dyn std::error::Erro
     let mac_address = uci_get("rs485-module", &sid, "bacnet_mac_address")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(1);
+        .unwrap_or(DEFAULT_BACNET_LOCAL_MAC);
     let max_master = uci_get("rs485-module", &sid, "bacnet_max_master")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -406,41 +707,58 @@ fn setup_mqtt_client(
 }
 
 /// Run bacwhois to discover BACnet devices on the MS/TP network.
-/// Returns a list of device instance IDs found.
+/// Returns the discovered device instance IDs.
 async fn discover_devices(config: &Config, logger: &Logger) -> Vec<u32> {
     logger.log("Running BACnet Who-Is discovery...");
 
+    if config.bacnet.mac_address == 1 {
+        logger.log(
+            "Warning: local BACnet MAC is set to 1. MS/TP MAC addresses must be unique on the bus, and field devices commonly use 1.",
+        );
+    }
+
+    let mut command = TokioCommand::new("/usr/bin/bacwhois");
+    configure_bacnet_command(&mut command, config)
+        .arg("--timeout")
+        .arg(DEFAULT_BACNET_DISCOVERY_TIMEOUT_MS.to_string())
+        .arg("--delay")
+        .arg(DEFAULT_BACNET_DISCOVERY_DELAY_MS.to_string());
+
     let result = tokio::time::timeout(
-        Duration::from_secs(10),
-        TokioCommand::new("/usr/bin/bacwhois")
-            .env("BACNET_IFACE", &config.serial.device)
-            .env("BACNET_MSTP_BAUD", config.serial.baudrate.to_string())
-            .env("BACNET_MSTP_MAC", config.bacnet.mac_address.to_string())
-            .env("BACNET_MAX_MASTER", config.bacnet.max_master.to_string())
-            .output(),
+        Duration::from_secs(20),
+        command.output(),
     )
     .await;
 
     match result {
         Ok(Ok(output)) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let mut devices = Vec::new();
-
-            // bacwhois output format: "device-instance;network;mac;max-apdu;segmentation;vendor-id"
-            for line in stdout.lines() {
-                let line = line.trim();
-                if line.is_empty() {
-                    continue;
-                }
-                // Parse device instance from first field
-                if let Some(instance_str) = line.split(';').next() {
-                    if let Ok(instance) = instance_str.trim().parse::<u32>() {
-                        devices.push(instance);
-                    }
-                }
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                logger.log(&format!("bacwhois exited with status {}: {}", output.status, stderr));
+                return Vec::new();
             }
 
-            logger.log(&format!("Discovered {} BACnet device(s): {:?}", devices.len(), devices));
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let devices = parse_discovered_devices(&stdout);
+
+            if devices.is_empty() && !stdout.trim().is_empty() {
+                let flattened = stdout
+                    .lines()
+                    .map(|line| line.trim())
+                    .filter(|line| !line.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                logger.log(&format!(
+                    "bacwhois returned output, but no device instances were parsed: {}",
+                    flattened
+                ));
+            }
+
+            logger.log(&format!(
+                "Discovered {} BACnet device(s): {:?}",
+                devices.len(),
+                devices
+            ));
             devices
         }
         Ok(Err(e)) => {
@@ -457,24 +775,23 @@ async fn discover_devices(config: &Config, logger: &Logger) -> Vec<u32> {
 /// Read all properties from a BACnet device using bacepics.
 /// Returns the raw output as a string to be forwarded via MQTT.
 async fn read_device_epics(config: &Config, device_instance: u32, logger: &Logger) -> Option<String> {
+    let mut command = TokioCommand::new("/usr/bin/bacepics");
+    configure_bacnet_command(&mut command, config)
+        .arg(device_instance.to_string());
+
     let result = tokio::time::timeout(
         Duration::from_secs(30),
-        TokioCommand::new("/usr/bin/bacepics")
-            .arg(device_instance.to_string())
-            .env("BACNET_IFACE", &config.serial.device)
-            .env("BACNET_MSTP_BAUD", config.serial.baudrate.to_string())
-            .env("BACNET_MSTP_MAC", config.bacnet.mac_address.to_string())
-            .env("BACNET_MAX_MASTER", config.bacnet.max_master.to_string())
-            .output(),
+        command.output(),
     )
     .await;
 
     match result {
         Ok(Ok(output)) => {
             if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                if !stdout.trim().is_empty() {
-                    Some(stdout)
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let sanitized = sanitize_bacnet_cli_output(&stdout);
+                if !sanitized.is_empty() {
+                    Some(sanitized)
                 } else {
                     logger.log(&format!("bacepics returned empty for device {}", device_instance));
                     None
@@ -501,32 +818,36 @@ async fn read_device_epics(config: &Config, device_instance: u32, logger: &Logge
 async fn read_property(
     config: &Config,
     device_instance: u32,
-    object_type: u32,
+    object_type: &str,
     object_instance: u32,
-    property_id: u32,
+    property: &str,
+    array_index: Option<u32>,
     logger: &Logger,
 ) -> Option<String> {
+    let mut command = TokioCommand::new("/usr/bin/bacrp");
+    configure_bacnet_command(&mut command, config)
+        .arg(device_instance.to_string())
+        .arg(object_type)
+        .arg(object_instance.to_string())
+        .arg(property);
+
+    if let Some(array_index) = array_index {
+        command.arg(array_index.to_string());
+    }
+
     let result = tokio::time::timeout(
-        Duration::from_secs(10),
-        TokioCommand::new("/usr/bin/bacrp")
-            .arg(device_instance.to_string())
-            .arg(object_type.to_string())
-            .arg(object_instance.to_string())
-            .arg(property_id.to_string())
-            .env("BACNET_IFACE", &config.serial.device)
-            .env("BACNET_MSTP_BAUD", config.serial.baudrate.to_string())
-            .env("BACNET_MSTP_MAC", config.bacnet.mac_address.to_string())
-            .env("BACNET_MAX_MASTER", config.bacnet.max_master.to_string())
-            .output(),
+        Duration::from_secs(15),
+        command.output(),
     )
     .await;
 
     match result {
         Ok(Ok(output)) => {
             if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !stdout.is_empty() {
-                    Some(stdout)
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let sanitized = sanitize_bacnet_cli_output(&stdout);
+                if !sanitized.is_empty() {
+                    Some(sanitized)
                 } else {
                     None
                 }
@@ -547,9 +868,137 @@ async fn read_property(
     }
 }
 
-/// Collect BACnet data from all discovered devices and build a JSON report.
-async fn collect_bacnet_data(config: &Config, logger: &Logger) -> Option<String> {
+async fn read_device_summary(
+    config: &Config,
+    device_instance: u32,
+    logger: &Logger,
+) -> Option<String> {
+    if let Some(object_name) = read_property(
+        config,
+        device_instance,
+        DEVICE_OBJECT_TYPE,
+        device_instance,
+        PROP_OBJECT_NAME,
+        None,
+        logger,
+    )
+    .await
+    {
+        return Some(format!(
+            "object-identifier: (device, {})\nobject-name: {}",
+            device_instance, object_name
+        ));
+    }
+
+    None
+}
+
+async fn collect_requested_bacnet_data(
+    config: &Config,
+    logger: &Logger,
+    runtime_state: &mut BacnetRuntimeState,
+    request: &BacnetReadRequest,
+) -> Option<String> {
+    let (devices, used_cached_devices) = if let Some(device_instance) = request.target_device_instance {
+        logger.log(&format!(
+            "Running targeted BACnet read for remote device {}",
+            device_instance
+        ));
+        (vec![device_instance], false)
+    } else {
+        get_target_devices(config, logger, runtime_state).await
+    };
+
+    if devices.is_empty() {
+        logger.log("No BACnet devices available for the requested read");
+        return None;
+    }
+
+    let mut report = serde_json::Map::new();
+
+    for device_id in &devices {
+        let data = if request.has_property_request() {
+            match read_property(
+                config,
+                *device_id,
+                request.object_type.as_deref().unwrap_or_default(),
+                request.object_instance.unwrap_or_default(),
+                request.property.as_deref().unwrap_or_default(),
+                request.array_index,
+                logger,
+            )
+            .await
+            {
+                Some(value) => Some(serde_json::json!({
+                    "object_type": request.object_type.as_deref().unwrap_or_default(),
+                    "object_instance": request.object_instance.unwrap_or_default(),
+                    "property": request.property.as_deref().unwrap_or_default(),
+                    "array_index": request.array_index,
+                    "value": value,
+                })),
+                None => None,
+            }
+        } else {
+            read_device_summary(config, *device_id, logger)
+                .await
+                .map(serde_json::Value::String)
+        };
+
+        match data {
+            Some(value) => {
+                report.insert(device_id.to_string(), value);
+            }
+            None => {
+                logger.log(&format!("No requested data from device {}", device_id));
+            }
+        }
+    }
+
+    if report.is_empty() {
+        if used_cached_devices {
+            logger.log("Cached BACnet device list produced no targeted data. Clearing cache.");
+            runtime_state.clear_cached_devices();
+        }
+        return None;
+    }
+
+    match serde_json::to_string(&report) {
+        Ok(json) => Some(json),
+        Err(e) => {
+            logger.log(&format!("JSON serialization failed: {}", e));
+            None
+        }
+    }
+}
+
+async fn get_target_devices(
+    config: &Config,
+    logger: &Logger,
+    runtime_state: &mut BacnetRuntimeState,
+) -> (Vec<u32>, bool) {
+    if let Some(cached_devices) = runtime_state.cached_devices() {
+        logger.log(&format!(
+            "Using cached BACnet device list: {:?}",
+            cached_devices
+        ));
+        return (cached_devices, true);
+    }
+
     let devices = discover_devices(config, logger).await;
+    if !devices.is_empty() {
+        runtime_state.cache_devices(&devices);
+    }
+
+    (devices, false)
+}
+
+/// Collect BACnet data from all discovered devices and build a JSON report.
+async fn collect_bacnet_data(
+    config: &Config,
+    logger: &Logger,
+    runtime_state: &mut BacnetRuntimeState,
+) -> Option<String> {
+    let (devices, used_cached_devices) = get_target_devices(config, logger, runtime_state).await;
 
     if devices.is_empty() {
         logger.log("No BACnet devices found on the network");
@@ -559,6 +1008,27 @@ async fn collect_bacnet_data(config: &Config, logger: &Logger) -> Option<String>
     let mut report = serde_json::Map::new();
 
     for device_id in &devices {
+        if runtime_state.prefers_summary_only(*device_id) {
+            logger.log(&format!(
+                "Skipping bacepics for device {} because it previously timed out.",
+                device_id
+            ));
+
+            match read_device_summary(config, *device_id, logger).await {
+                Some(data) => {
+                    report.insert(
+                        device_id.to_string(),
+                        serde_json::Value::String(data),
+                    );
+                }
+                None => {
+                    logger.log(&format!("No data from device {}", device_id));
+                }
+            }
+
+            continue;
+        }
+
         match read_device_epics(config, *device_id, logger).await {
             Some(data) => {
                 report.insert(
@@ -567,12 +1037,32 @@ async fn collect_bacnet_data(config: &Config, logger: &Logger) -> Option<String>
                 );
             }
             None => {
-                logger.log(&format!("No data from device {}", device_id));
+                runtime_state.mark_summary_only(*device_id);
+                logger.log(&format!(
+                    "bacepics returned no data for device {}. Falling back to targeted ReadProperty requests.",
+                    device_id
+                ));
+
+                match read_device_summary(config, *device_id, logger).await {
+                    Some(data) => {
+                        report.insert(
+                            device_id.to_string(),
+                            serde_json::Value::String(data),
+                        );
+                    }
+                    None => {
+                        logger.log(&format!("No data from device {}", device_id));
+                    }
+                }
             }
         }
     }
 
     if report.is_empty() {
+        if used_cached_devices {
+            logger.log("Cached BACnet device list produced no data. Clearing cache.");
+            runtime_state.clear_cached_devices();
+        }
         return None;
     }
 
@@ -639,10 +1129,15 @@ async fn main() {
 
     let mut last_poll = tokio::time::Instant::now()
         - Duration::from_secs(config.bacnet.poll_interval);
+    let mut bacnet_runtime_state = BacnetRuntimeState::default();
     let trigger_read_owned = format!("/tmp/rs485/bacnet_read_{}", port_num);
+    let request_owned = format!("/tmp/rs485/bacnet_request_{}", port_num);
     let result_owned = format!("/tmp/rs485/bacnet_result_{}", port_num);
+    let periodic_result_owned = format!("/tmp/rs485/bacnet_last_result_{}", port_num);
     let trigger_read_path = trigger_read_owned.as_str();
+    let request_path = request_owned.as_str();
     let result_path = result_owned.as_str();
+    let periodic_result_path = periodic_result_owned.as_str();
 
     // Main event loop
     loop {
@@ -650,8 +1145,43 @@ async fn main() {
         if Path::new(trigger_read_path).exists() {
             logger.log("BACnet read trigger detected");
             let _ = std::fs::remove_file(trigger_read_path);
+            last_poll = tokio::time::Instant::now();
 
-            match collect_bacnet_data(&config, &logger).await {
+            let read_request = match load_trigger_read_request(request_path, &logger) {
+                Ok(request) => request,
+                Err(e) => {
+                    let error_msg = format!("Error: {}", e);
+                    let _ = std::fs::write(result_path, &error_msg);
+                    logger.log(&error_msg);
+
+                    if let Some(ref client) = mqtt_client {
+                        let json = build_bacnet_error_uplink(&config.bacnet, &error_msg);
+                        if !publish_mqtt_payload(
+                            client,
+                            mqtt_eventloop.as_mut(),
+                            &config.mqtt.uplink_topic,
+                            config.mqtt.qos_level,
+                            &json,
+                            &logger,
+                        )
+                        .await
+                        {
+                            mqtt_state = "failed_connect";
+                        }
+                    }
+
+                    continue;
+                }
+            };
+
+            let read_result = if let Some(ref request) = read_request {
+                collect_requested_bacnet_data(&config, &logger, &mut bacnet_runtime_state, request)
+                    .await
+            } else {
+                collect_bacnet_data(&config, &logger, &mut bacnet_runtime_state).await
+            };
+
+            match read_result {
                 Some(data) => {
                     logger.log(&format!("BACnet data collected: {}", data));
                     if let Err(e) = std::fs::write(result_path, &data) {
@@ -665,17 +1195,17 @@ async fn main() {
                             .and_then(|v| v.as_object().map(|o| o.len()))
                             .unwrap_or(0);
                         let json = build_bacnet_uplink(&config.bacnet, &data, device_count, None);
-                        match client
-                            .publish(
-                                &config.mqtt.uplink_topic,
-                                config.mqtt.qos_level,
-                                false,
-                                json.as_bytes(),
-                            )
-                            .await
+                        if !publish_mqtt_payload(
+                            client,
+                            mqtt_eventloop.as_mut(),
+                            &config.mqtt.uplink_topic,
+                            config.mqtt.qos_level,
+                            &json,
+                            &logger,
+                        )
+                        .await
                         {
-                            Ok(_) => logger.log(&format!("Published to MQTT: {}", config.mqtt.uplink_topic)),
-                            Err(e) => logger.log(&format!("MQTT publish failed: {}", e)),
+                            mqtt_state = "failed_connect";
                         }
                     }
                 }
@@ -687,12 +1217,18 @@ async fn main() {
                     // Publish error to MQTT if connected
                     if let Some(ref client) = mqtt_client {
                         let json = build_bacnet_error_uplink(&config.bacnet, error_msg);
-                        let _ = client.publish(
+                        if !publish_mqtt_payload(
+                            client,
+                            mqtt_eventloop.as_mut(),
                             &config.mqtt.uplink_topic,
                             config.mqtt.qos_level,
-                            false,
-                            json.as_bytes(),
-                        ).await;
+                            &json,
+                            &logger,
+                        )
+                        .await
+                        {
+                            mqtt_state = "failed_connect";
+                        }
                     }
                 }
             }
@@ -703,9 +1239,9 @@ async fn main() {
         if elapsed >= Duration::from_secs(config.bacnet.poll_interval) {
             last_poll = tokio::time::Instant::now();
 
-            if let Some(data) = collect_bacnet_data(&config, &logger).await {
-                // Write to result file
-                let _ = std::fs::write(result_path, &data);
+            if let Some(data) = collect_bacnet_data(&config, &logger, &mut bacnet_runtime_state).await {
+                // Keep periodic polling data separate from one-shot manual reads.
+                let _ = std::fs::write(periodic_result_path, &data);
 
                 // Publish to MQTT if connected
                 if let Some(ref client) = mqtt_client {
@@ -714,17 +1250,17 @@ async fn main() {
                         .and_then(|v| v.as_object().map(|o| o.len()))
                         .unwrap_or(0);
                     let json = build_bacnet_uplink(&config.bacnet, &data, device_count, None);
-                    match client
-                        .publish(
-                            &config.mqtt.uplink_topic,
-                            config.mqtt.qos_level,
-                            false,
-                            json.as_bytes(),
-                        )
-                        .await
+                    if !publish_mqtt_payload(
+                        client,
+                        mqtt_eventloop.as_mut(),
+                        &config.mqtt.uplink_topic,
+                        config.mqtt.qos_level,
+                        &json,
+                        &logger,
+                    )
+                    .await
                     {
-                        Ok(_) => logger.log(&format!("Published to MQTT: {}", config.mqtt.uplink_topic)),
-                        Err(e) => logger.log(&format!("MQTT publish failed: {}", e)),
+                        mqtt_state = "failed_connect";
                     }
                 }
             }
