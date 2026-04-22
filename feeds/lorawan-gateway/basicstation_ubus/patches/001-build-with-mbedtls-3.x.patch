@@ -6,9 +6,9 @@ Subject: [PATCH] build with mbedtls 3.x
 Signed-off-by: Glenn Strauss <gstrauss@gluelogic.com>
 ---
  src/cups.c | 15 +++++++++------
- src/tls.c  |  8 ++++++--
+ src/tls.c  | 12 +++++++++---
  src/tls.h  |  6 +++++-
- 3 files changed, 20 insertions(+), 9 deletions(-)
+ 3 files changed, 23 insertions(+), 10 deletions(-)
 
 --- a/src/cups.c
 +++ b/src/cups.c
@@ -51,9 +51,12 @@ Signed-off-by: Glenn Strauss <gstrauss@gluelogic.com>
  #include "mbedtls/entropy.h"
  #include "mbedtls/ctr_drbg.h"
  #include "mbedtls/error.h"
-@@ -230,7 +229,12 @@ int tls_setMyCert (tlsconf_t* conf, cons
+@@ -230,7 +229,14 @@ int tls_setMyCert (tlsconf_t* conf, cons
          keyb = (u1_t*)dbuf.buf;
-         keyl = dbuf.bufsize+1;
+-        keyl = dbuf.bufsize+1;
++        // '\0' at the end expected by mbedTLS if PEM
++        keyl = dbuf.bufsize;
++        keyl += keyb[0] == '-' ? 1 : 0;
      }
 -    if( (ret = mbedtls_pk_parse_key(mykey, keyb, keyl, (const u1_t*)pwd, pwd?strlen(pwd):0)) != 0 ) {
 +    ret = mbedtls_pk_parse_key(mykey, keyb, keyl, (const u1_t*)pwd, pwd?strlen(pwd):0
