@@ -89,6 +89,24 @@ function buildPortMaps(portNum) {
         });
     }
 
+    function bacnetManualReadRow(field, title, placeholder, description) {
+        return E('div', { 'class': 'cbi-value' }, [
+            E('label', {
+                'class': 'cbi-value-title',
+                'for': 'bacnet_' + field + '_' + portNum
+            }, title),
+            E('div', { 'class': 'cbi-value-field' }, [
+                E('input', {
+                    'id': 'bacnet_' + field + '_' + portNum,
+                    'class': 'cbi-input-text',
+                    'type': 'text',
+                    'placeholder': placeholder
+                }),
+                E('div', { 'class': 'cbi-value-description' }, description)
+            ])
+        ]);
+    }
+
     /* ===== Map 1: Protocol Configuration ===== */
     var m1 = new form.Map('rs485-module', '');
     var s1 = m1.section(form.NamedSection, sid, 'port', _('Protocol Configuration'));
@@ -283,7 +301,7 @@ function buildPortMaps(portNum) {
 
     o = sb.option(form.Value, 'bacnet_mac_address', _('MAC Address'),
         _('BACnet MS/TP master MAC address for the gateway (0-127). It must be unique on the RS485 bus and must not match the target device MAC.'));
-    o.datatype = 'range(0,127)'; o.placeholder = '10'; o.default = '10';
+    o.datatype = 'range(0,127)'; o.placeholder = '2'; o.default = '2';
 
     o = sb.option(form.Value, 'bacnet_max_master', _('Max Master'),
         _('Maximum MS/TP master address on the network (1-127).'));
@@ -295,7 +313,7 @@ function buildPortMaps(portNum) {
 
     o = sb.option(form.Value, 'bacnet_device_instance', _('Device Instance ID'),
         _('Unique BACnet device instance number (0-4194302).'));
-    o.datatype = 'range(0,4194302)'; o.placeholder = '1234'; o.default = '1234';
+    o.datatype = 'range(0,4194302)'; o.placeholder = '1002'; o.default = '1002';
 
     o = sb.option(form.Value, 'bacnet_device_name', _('Device Name'),
         _('Human-readable name for this BACnet device.'));
@@ -306,30 +324,39 @@ function buildPortMaps(portNum) {
     o.datatype = 'range(1,3600)'; o.placeholder = '10'; o.default = '10'; o.rmempty = false;
 
     o = sb.option(form.DummyValue, '_bacnet_targeted_read', _('Targeted Read Options'));
-    o.rawhtml = true;
-    o.cfgvalue = function() {
-        return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">' +
-            '<div><label style="display:block;font-weight:600;margin-bottom:4px;">' + _('Target Device Instance') + '</label>' +
-            '<input id="bacnet_target_device_' + portNum + '" type="text" placeholder="1" ' +
-            'style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" />' +
-            '<div style="margin-top:4px;color:#666;font-size:12px;">' + _('Optional remote BACnet device instance. Leave blank to read all discovered devices.') + '</div></div>' +
-            '<div><label style="display:block;font-weight:600;margin-bottom:4px;">' + _('Object Type') + '</label>' +
-            '<input id="bacnet_object_type_' + portNum + '" type="text" placeholder="analog-input or 0" ' +
-            'style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" />' +
-            '<div style="margin-top:4px;color:#666;font-size:12px;">' + _('Optional. Fill this together with Object Instance and Property to issue a targeted ReadProperty.') + '</div></div>' +
-            '<div><label style="display:block;font-weight:600;margin-bottom:4px;">' + _('Object Instance') + '</label>' +
-            '<input id="bacnet_object_instance_' + portNum + '" type="text" placeholder="0" ' +
-            'style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" />' +
-            '<div style="margin-top:4px;color:#666;font-size:12px;">' + _('Object instance number for the targeted object.') + '</div></div>' +
-            '<div><label style="display:block;font-weight:600;margin-bottom:4px;">' + _('Property') + '</label>' +
-            '<input id="bacnet_property_' + portNum + '" type="text" placeholder="present-value or 85" ' +
-            'style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" />' +
-            '<div style="margin-top:4px;color:#666;font-size:12px;">' + _('Property name or BACnet property ID.') + '</div></div>' +
-            '<div><label style="display:block;font-weight:600;margin-bottom:4px;">' + _('Array Index') + '</label>' +
-            '<input id="bacnet_array_index_' + portNum + '" type="text" placeholder="optional" ' +
-            'style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" />' +
-            '<div style="margin-top:4px;color:#666;font-size:12px;">' + _('Optional BACnet array index for array-valued properties.') + '</div></div>' +
-        '</div>';
+    o.render = function() {
+        return E('div', { 'class': 'cbi-section-node' }, [
+            bacnetManualReadRow(
+                'target_device',
+                _('Target Device Instance'),
+                '1',
+                _('Remote BACnet device instance. Leave blank to read all discovered devices.')
+            ),
+            bacnetManualReadRow(
+                'object_type',
+                _('Object Type'),
+                'analog-input or 0',
+                _('Fill this together with Object Instance and Property to issue a targeted ReadProperty.')
+            ),
+            bacnetManualReadRow(
+                'object_instance',
+                _('Object Instance'),
+                '1',
+                _('Object instance number for the targeted object.')
+            ),
+            bacnetManualReadRow(
+                'property',
+                _('Property'),
+                'present-value or 85',
+                _('Property name or BACnet property ID.')
+            ),
+            bacnetManualReadRow(
+                'array_index',
+                _('Array Index'),
+                _('optional'),
+                _('Optional BACnet array index for array-valued properties.')
+            )
+        ]);
     };
 
     o = sb.option(form.Button, '_bacnet_read_btn', _('Read Data'));
@@ -530,7 +557,7 @@ return view.extend({
             });
 
             var wrapper = E('div', { 'class': 'cbi-map', 'id': 'rs485-protocol-tabs-wrapper' }, [
-                E('h2', {}, _('Serial Settings')),
+                E('h2', {}, _('Protocol Configuration')),
                 E('div', { 'class': 'cbi-map-descr' },
                     _('Configure each RS485 port independently.')),
                 tabBar
