@@ -12,6 +12,10 @@ if not conn then
         error("Failed to connect to ubus")
 end
 
+local function schedule_host_power_action(trigger)
+        os.execute(string.format("( sleep 1; printf '%%s' '%s' > /proc/sysrq-trigger ) >/dev/null 2>&1 &", trigger))
+end
+
 local gps_longitude_v = 0
 local gps_latitude_v = 0
 local gps_altitude_v = 0
@@ -268,16 +272,16 @@ local my_method = {
                 },
                 reboot_host = {
                         function(req, msg)
-                                os.execute("echo b > /proc/sysrq-trigger")
-                                print("Rebooting host...")
                                 conn:reply(req, {result=0})
+                                schedule_host_power_action("b")
+                                print("Rebooting host...")
                         end, {}
                 },
                 shutdown_host = {
                         function(req, msg)
-                                os.execute("echo o > /proc/sysrq-trigger")
-                                print("Shutting down host...")
                                 conn:reply(req, {result=0})
+                                schedule_host_power_action("o")
+                                print("Shutting down host...")
                         end, {}
                 }
         }
